@@ -1,13 +1,16 @@
-import Crypto.Util.number
 import md5
-import gmpy
+import math
 import string
 import random
 import unittest
 
-METHOD = '\x01'
-CHARS = ['0','1']
+import Crypto.Util.number
+import gmpy
+
+CHARS = ['0','1']#,'1','2','3','4','5','6','7','8','9','a','b','c','d','e','f','g','h','i']
+RADIX = len(CHARS)
 ZERO_BIT = '0'
+bits = 8
 
 class Bottom(Exception):
     pass
@@ -17,7 +20,7 @@ class UnknownTypeException(Exception):
 
 class FFXInteger(object):
     
-    def __init__(self, x, radix=2, blocksize=None):
+    def __init__(self, x, radix=RADIX, blocksize=None):
         if type(x) in [int,long]:
             self._x = gmpy.digits(x, radix)
         elif type(x) in [str]:
@@ -37,8 +40,8 @@ class FFXInteger(object):
         
         other = FFXInteger(other, self._radix, self._blocksize)
         
-        retval = int(self._x, self._radix)
-        retval += int(other.to_str(), self._radix)
+        retval = self.to_int()
+        retval += other.to_int()
         retval = gmpy.digits(retval, self._radix)
         
         if self._blocksize!=None:
@@ -47,7 +50,7 @@ class FFXInteger(object):
         return FFXInteger(retval, self._radix, self._blocksize)
     
     def __eq__(self, other):
-        #print [type(other), other]
+        #print [type(other), other]the weepies
         if type(other) == FFXInteger:
             retval = self.to_int() == other.to_int()
         elif type(other) in [str]:
@@ -114,7 +117,7 @@ def isEven(n):
 def xor(X, Y, chars, plus=True):
     #print ['xor', type(X), type(Y), type(X[0]), X, Y]
     #assert len(X) == len(Y)
-    assert X._radix == Y._radix
+    assert X._radix == Y._radix, (X._radix, Y._radix)
     assert X._blocksize == Y._blocksize, (X._blocksize, Y._blocksize)
     
     if len(X)>len(Y):
@@ -148,7 +151,6 @@ def add(X,Y,chars=CHARS):
     return xor(X,Y,chars,True)
 
 def sub(X,Y,chars=CHARS):
-    print ['sub',X,Y]
     return xor(X,Y,chars,False)
 
 
@@ -168,7 +170,7 @@ def rnds(n):
         
 def split(n):
     """TODO"""
-    return int((n*1.0)/2)
+    return int(math.floor((n*1.0)/2))
 
 def F(K,n,T,i,B):
     #print ['F', K,n,T,i,B]
@@ -176,37 +178,7 @@ def F(K,n,T,i,B):
     vers = 1
     method = 2
     addition = 0
-
-def sub(X,Y,chars=CHARS):
-    #print ['sub',X,Y]
-    return xor(X,Y,chars,False)
-
-
-def rnds(n):
-    """TODO"""
-    if n >= 8 and n <= 9:
-        retval = 36
-    if n >= 10 and n <= 13:
-        retval = 30
-    if n >= 14 and n <= 19:
-        retval = 24
-    if n >= 20 and n <= 31:
-        retval = 18
-    if n >= 32 and n <= 128:
-        retval = 12
-    return retval
-        
-def split(n):
-    """TODO"""
-    return int((n*1.0)/2)
-
-def F(K,n,T,i,B):
-    #print ['F', K,n,T,i,B]
-    
-    vers = 1
-    method = 2
-    addition = 0
-    radix = 2
+    radix = RADIX
     
     P  = long_to_bytes(vers, 2)
     P += long_to_bytes(method, 1)
@@ -221,9 +193,9 @@ def F(K,n,T,i,B):
     
     #print ['T',T]
     Q  = T.to_str()
-    Q += FFXInteger( ZERO_BIT, radix=2 , blocksize= (((-1*len(T))-1) % 16)*8 ).to_str()
+    Q += FFXInteger( ZERO_BIT, radix=RADIX , blocksize= (((-1*len(T))-1) % 16)*8 ).to_str()
     #print [i]
-    Q += FFXInteger(i,radix=2,blocksize=8).to_str()
+    Q += FFXInteger(i,radix=RADIX,blocksize=8).to_str()
     #print ['FFXInteger(i).to_str()',FFXInteger(i).to_str()]
     Q += (ZERO_BIT * 8 * (64-len(B)))
     #print ['B',B]
@@ -231,7 +203,7 @@ def F(K,n,T,i,B):
     
     #Q =
     #print [len(P), len(Q), P, Q]
-    Q = FFXInteger(Q)
+    Q = FFXInteger(Q, radix=RADIX)
     #print [len(Q),len(Q)]
     Q = Q.to_bytes()
     
@@ -245,13 +217,14 @@ def F(K,n,T,i,B):
     if isEven(i):
         m = split(n)
     else:
-        m = n - split(n)
+        #m = n - split(n)
+        m = split(n)
     #print ['m',m]
     
     Y = bin(int(Y.encode('hex'),base=16))[2:]
     #print ['Y', m, Y[-m:]]
     #print ['B',B[-m:]]
-    return FFXInteger(Y[-m:],2,m)
+    return FFXInteger(Y[-m:],radix=RADIX,blocksize=m)
 
 def ffx_encrypt(K,T,X):
     """assertions"""
@@ -259,25 +232,17 @@ def ffx_encrypt(K,T,X):
     n = len(X)
     l = split(n)
     r = rnds(n)
-    if METHOD == '\x01':
-        for i in range(r):
-            A = X[:l]
-            B = X[l:]
-            #print [type(A),type(F(K,n,T,i,B))]
-            #print ['A',A]
-            C = add( A, F(K,n,T,i,B) )
-            #print [i,'B','C',B,C]
-            X = FFXInteger(str(B) + str(C),2,len(B)+len(C))
-        retval = X
-    elif METHOD == '\x02':
-        A = X[:l]
-        B = X[l:]
-        for i in range(r):
-            C = add(A, F(K,n,T,i,B))
-            A = B
-            B = C
-        retval = A + B
-        
+    A = X[:l]
+    B = X[l:]
+    for i in range(r):
+        #print [type(A),type(F(K,n,T,i,B))]
+        #print ['A,F',A, F(K,n,T,i,B) ]
+        C = add( A, F(K,n,T,i,B) )
+        #print [i,'B','C',B,C]
+        A = B
+        B = C
+        #X = FFXInteger(str(B) + str(C),radix=RADIX,blocksize=len(B)+len(C))
+    retval = FFXInteger(str(A) + str(B),radix=RADIX,blocksize=len(A)+len(B))        
     return retval
 
 def ffx_decrypt(K,T,Y):
@@ -288,22 +253,15 @@ def ffx_decrypt(K,T,Y):
     l = split(n)
     r = rnds(n)
     
-    if METHOD == '\x01':
-        for i in range(r-1,-1,-1):
-            B = Y[:n-l]
-            C = Y[n-l:]
-            #print [i, 'Y,C,n,n-l,F',Y, C, n, n-l,F(K,n,T,i,B)]
-            A = sub(C, F(K,n,T,i,B))
-            Y = FFXInteger(str(A) + str(B),2,len(A)+len(B))
-        retval = Y
-    elif METHOD == '\x02':
-        A = Y[:l]
-        B = Y[l:]
-        for i in range(r-1,-1,-1):
-            C = B
-            B = A
-            A = sub(C, F(K,n,T,i,B))
-        retval = A + B
+    A = Y[:l]
+    B = Y[l:]
+    for i in range(r-1,-1,-1):
+        C = B
+        B = A
+        #print [i, 'Y,C,n,n-l,F',Y, C, n, n-l,F(K,n,T,i,B)]
+        A = sub(C, F(K,n,T,i,B))
+        
+    retval = FFXInteger(str(A) + str(B),radix=RADIX,blocksize=len(A)+len(B))
         
     return retval
 
@@ -323,19 +281,26 @@ def test():
     assert add(X, Y) == FFXInteger('000'), add(X,Y)
     assert sub(X, Y) == FFXInteger('000'), sub(X,Y)
 
+def random_int(length):
+    retval = ''
+    for i in range(length):
+        retval += random.choice(CHARS)
+    return retval
+
+
 def main():
-    for i in range(100):
-        K = bin(int(random.choice(range(256))))[2:]
-        T = bin(int(random.choice(range(256))))[2:]
-        M1 = bin(int(random.choice(range(256))))[2:]
+    for i in range(2**16):
+        K = random_int(bits)
+        T = random_int(bits)
+        M1 = random_int(bits)
         
-        K = string.rjust(K, 8, '0')
-        T = string.rjust(T, 8, '0')
-        M1 = string.rjust(M1, 8, '0')
+        K = string.rjust(K, bits, '0')
+        T = string.rjust(T, bits, '0')
+        M1 = string.rjust(M1, bits, '0')
         
-        K  = FFXInteger(K, radix=2, blocksize=8)
-        T  = FFXInteger(T, radix=2, blocksize=8)
-        M1 = FFXInteger(M1, radix=2, blocksize=8)
+        K  = FFXInteger(K, radix=RADIX, blocksize=bits)
+        T  = FFXInteger(T, radix=RADIX, blocksize=bits)
+        M1 = FFXInteger(M1, radix=RADIX, blocksize=bits)
         C = ffx_encrypt(K, T, M1)
         M2 = ffx_decrypt(K, T, C)
         
@@ -344,5 +309,5 @@ def main():
         assert M1 == M2
     
 if __name__ == "__main__":
-    test()
+    #test()
     main()
