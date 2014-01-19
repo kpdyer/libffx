@@ -5,6 +5,7 @@ import time
 import math
 import random
 import string
+import argparse
 
 import FFX
 
@@ -20,20 +21,31 @@ def random_string(length, radix):
 
 
 def main():
-    radix = 2
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--radix",type=int)
+    parser.add_argument("--tweaksize",type=int)
+    parser.add_argument("--messagesize",type=int)
+    args = parser.parse_args()
+
+    assert args.radix in range(2,63)
+    assert args.tweaksize in range(8,129)
+    assert args.messagesize in range(8,129)
+
+    radix = args.radix
+    tweaksize = args.tweaksize
+    messagesize = args.messagesize
+    
     keysize = 128
-    tweaksize = 8
-    messagesize = 8
+    K = random_string(keysize, 2)
+    K = string.rjust(K, keysize, '0')  # must be 128 bits, no matter what
+    K = FFX.FFXInteger(K, radix=2, blocksize=keysize)
     
     banner = ['RADIX='+str(radix),
               'TWEAKSIZE='+str(tweaksize),
               'MESSAGESIZE='+str(messagesize),
+              'KEY='+K.to_hex()
              ]
     print ', '.join(banner)
-    
-    K = random_string(keysize, 2)
-    K = string.rjust(K, keysize, '0')  # must be 128 bits, no matter what
-    K = FFX.FFXInteger(K, radix=2, blocksize=keysize)
         
     for i in range(1,11):
         T = random_string(tweaksize, radix)

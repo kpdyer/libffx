@@ -34,7 +34,7 @@ def long_to_bytes(n, blocksize=0):
 
 class FFXInteger(object):
 
-    def __init__(self, x, radix, blocksize):
+    def __init__(self, x, radix=2, blocksize=None):
         if type(x) in [int, long]:
             self._x = gmpy.digits(x, radix)
         elif type(x) in [str]:
@@ -96,6 +96,9 @@ class FFXInteger(object):
     def to_int(self):
         return int(self._x, self._radix)
 
+    def to_hex(self):
+        return hex(int(self._x, self._radix))
+
     def to_bytes(self):
         _cur_len = len(self._x)
         num_bytes = int(_cur_len / 8.0)
@@ -130,6 +133,7 @@ class FFXEncrypter(object):
 
     def CBC_MAC(self, K, X):
         """TODO"""
+        #assert (len(X) % 16 == 0)
         m = md5.new()
         m.update(X)
         return m.digest()

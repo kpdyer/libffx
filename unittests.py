@@ -61,8 +61,6 @@ class TestFFX(unittest.TestCase):
         C = ffx.encrypt(K, T, M1)
         M2 = ffx.decrypt(K, T, C)
 
-        print [M1, C, M2]
-
         self.assertEquals( M1, M2)
 
 if __name__ == '__main__':
