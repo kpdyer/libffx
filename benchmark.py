@@ -22,18 +22,21 @@ def random_string(length, radix):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--radix", type=int)
-    parser.add_argument("--tweaksize", type=int)
-    parser.add_argument("--messagesize", type=int)
+    parser.add_argument("--radix", type=int, default=2)
+    parser.add_argument("--tweaksize", type=int, default=8)
+    parser.add_argument("--messagesize", type=int, default=8)
+    parser.add_argument("--trials", type=int, default=10, required=False)
     args = parser.parse_args()
 
     assert args.radix in range(2, 63)
     assert args.tweaksize in range(8, 129)
+    assert args.tweaksize % 8 == 0
     assert args.messagesize in range(8, 129)
 
     radix = args.radix
     tweaksize = args.tweaksize
     messagesize = args.messagesize
+    trials = args.trials
 
     keysize = 128
     K = random_string(keysize, 2)
@@ -47,7 +50,7 @@ def main():
               ]
     print ', '.join(banner)
 
-    for i in range(1, 11):
+    for i in range(1, trials):
         T = random_string(tweaksize, radix)
         M1 = random_string(messagesize, radix)
 
@@ -69,13 +72,13 @@ def main():
 
         assert M1 == M2
 
-        to_print = ['tweak=' + str(T),
+        to_print = ['encrypt_cost=' + str(round(encrypt_cost, 1)) + 'ms',
+                    'decrypt_cost=' + str(round(decrypt_cost, 1)) + 'ms',
+                    'tweak=' + str(T),
                     'plaintext=' + str(M1),
                     'ciphertext=' + str(C),
-                    'encrypt_cost=' + str(round(encrypt_cost, 1)) + 'ms',
-                    'decrypt_cost=' + str(round(decrypt_cost, 1)) + 'ms',
                     ]
-        print 'test #' + string.rjust(str(i), 2, '0') + ' SUCCESS: (' + ', '.join(to_print) + ')'
+        print 'test #' + string.rjust(str(i), len(str(trials-1)), '0') + ' SUCCESS: (' + ', '.join(to_print) + ')'
 
 
 if __name__ == "__main__":

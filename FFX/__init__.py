@@ -133,10 +133,21 @@ class FFXEncrypter(object):
 
     def CBC_MAC(self, K, X):
         """TODO"""
-        #assert (len(X) % 16 == 0)
-        m = md5.new()
-        m.update(X)
-        return m.digest()
+        assert (len(X) % 16 == 0)
+        
+        Y = '\x00' * 16
+        while len(X)>0:
+            Z = int(Y.encode('hex'),16) ^ int(X[:16].encode('hex'),16)
+            Z = hex(Z)[2:]
+            Z = Z[2:] if Z.startswith('0x') else Z
+            Z = Z[:-1] if Z.endswith('L') else Z
+            Z = '0' + Z if len(Z) % 2 == 1 else Z
+            Z = Z.decode('hex')
+            Z = string.rjust(Z, 16, '0')
+            Y = self.AES_ECB(K.to_bytes(), Z)
+            X = X[16:]
+        
+        return Y
 
     def isEven(self, n):
         return ((n % 2) == 0)
@@ -198,7 +209,7 @@ class FFXEncrypter(object):
         vers = 1
         method = 2
         addition = 1
-        t = len(T)
+        t = len(T.to_bytes())
         beta = math.ceil(n / 2.0)
         b = int(math.ceil(beta * math.log(self._radix, 2) / 8.0))
         d = 4 * int(math.ceil(b / 4.0))
@@ -216,14 +227,10 @@ class FFXEncrypter(object):
         P += long_to_bytes(n, 4)
         P += long_to_bytes(t, 4)
 
-        Q = T.to_str()
-        Q += FFXInteger('0', radix=self._radix,
-                        blocksize=(((-1 * len(T)) - b - 1) % 16)).to_str()
-        Q += FFXInteger(i, radix=self._radix, blocksize=1).to_str()
-        Q += FFXInteger(B, radix=self._radix, blocksize=b).to_str()
-
-        Q = FFXInteger(Q, radix=self._radix, blocksize=16)
-        Q = Q.to_bytes()
+        Q = T.to_bytes()
+        Q += '\x00' * (((-1 * len(T.to_bytes())) - b - 1) % 16)
+        Q += FFXInteger(i, radix=self._radix, blocksize=1).to_bytes()
+        Q += FFXInteger(B, radix=self._radix, blocksize=b).to_bytes()
 
         Y = self.CBC_MAC(K, P + Q)
         TMP = Y
