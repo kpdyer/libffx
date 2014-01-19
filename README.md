@@ -2,6 +2,28 @@ FFX
 ===
 
 
+Example Usage
+-------------
+
+```
+>>> import FFX
+>>>
+>>> ffx = FFX.new(radix=2)
+>>>
+>>> K = FFX.FFXInteger('0'*128, radix=2, blocksize=128)
+>>> T = FFX.FFXInteger('0'*8, radix=2, blocksize=8)
+>>> M = FFX.FFXInteger('0'*8, radix=2, blocksize=8)
+>>>
+>>> print M
+0000000
+>>> C = ffx.encrypt(K, T, M)
+>>> print C
+00010111
+>>> ffx.decrypt(K, T, C)
+00000000
+```
+
+
 Benchmarks
 ----------
 
@@ -48,23 +70,4 @@ test #07 SUCCESS: (tweak=18c8677f, plaintext=8d0096ae, ciphertext=17b21da1, encr
 test #08 SUCCESS: (tweak=096886ba, plaintext=19481ec3, ciphertext=167182ee, encrypt_cost=8.4ms, decrypt_cost=8.2ms)
 test #09 SUCCESS: (tweak=47ed4185, plaintext=6ba2a57d, ciphertext=1ea7bec2, encrypt_cost=8.2ms, decrypt_cost=8.9ms)
 test #10 SUCCESS: (tweak=3ea10457, plaintext=c0f976af, ciphertext=cb78bd5a, encrypt_cost=8.1ms, decrypt_cost=8.1ms)
-```
-
-Example Usage
--------------
-
-```
->>> import FFX
->>>
->>> ffx = FFX.new(radix=2)
->>>
->>> K = FFX.FFXInteger('0'*128, radix=2, blocksize=128)
->>> T = FFX.FFXInteger('0'*8, radix=2, blocksize=8)
->>> M1 = FFX.FFXInteger('0'*8, radix=2, blocksize=8)
->>>
->>> C = ffx.encrypt(K, T, M1)
->>> print C
-00010111
->>> ffx.decrypt(K, T, C)
-00000000
 ```

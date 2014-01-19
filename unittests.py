@@ -42,26 +42,26 @@ class TestFFX(unittest.TestCase):
         self.assertEquals(X.to_bytes(), '\xFF')
 
     def testFFXInteger6(self):
-        X = FFXInteger('FF',radix=16)
+        X = FFXInteger('FF', radix=16)
 
         self.assertEquals(X.to_bytes(), '\xFF')
 
     def testFFXInteger3(self):
-        for blocksize in range(1,129):
+        for blocksize in range(1, 129):
             X = FFXInteger('0', radix=2, blocksize=blocksize)
             self.assertEquals(len(X), blocksize)
 
     def testFFXEncrypt1(self):
         radix = 2
-        K = FFXInteger('0'*8, radix=radix, blocksize=128)
-        T = FFXInteger('0'*8, radix=radix, blocksize=8)
-        M1 = FFXInteger('0'*8, radix=radix, blocksize=8)
+        K = FFXInteger('0' * 8, radix=radix, blocksize=128)
+        T = FFXInteger('0' * 8, radix=radix, blocksize=8)
+        M1 = FFXInteger('0' * 8, radix=radix, blocksize=8)
 
         ffx = FFX.new(radix)
         C = ffx.encrypt(K, T, M1)
         M2 = ffx.decrypt(K, T, C)
 
-        self.assertEquals( M1, M2)
+        self.assertEquals(M1, M2)
 
 if __name__ == '__main__':
     unittest.main()

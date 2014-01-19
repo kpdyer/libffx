@@ -46,7 +46,7 @@ class FFXInteger(object):
 
         if blocksize:
             self._x = string.rjust(self._x, blocksize, '0')
-            
+
         self._len = len(self._x)
         self._radix = radix
         self._blocksize = blocksize
@@ -115,9 +115,9 @@ class FFXInteger(object):
 class FFXEncrypter(object):
 
     def __init__(self, radix):
-        if radix not in range(2,26+26+10+1):
+        if radix not in range(2, 26 + 26 + 10 + 1):
             raise InvalidRadixException()
-        
+
         self._radix = radix
         self._chars = string.digits + string.ascii_letters
         self._chars = self._chars[:radix]
@@ -239,9 +239,9 @@ class FFXEncrypter(object):
     def encrypt(self, K, T, X):
         """assertions"""
         retval = ''
-        
+
         assert K._blocksize == 128
-        
+
         n = len(X)
         l = self.split(n)
         r = self.rnds(n)
@@ -260,7 +260,7 @@ class FFXEncrypter(object):
         retval = ''
 
         assert K._blocksize == 128
-        
+
         n = len(Y)
         l = self.split(n)
         r = self.rnds(n)
