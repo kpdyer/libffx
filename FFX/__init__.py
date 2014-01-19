@@ -3,12 +3,12 @@ import md5
 import string
 
 import gmpy
-import Crypto
 
+import Crypto.Util.number
 from Crypto.Cipher import AES
 
-CHARS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-RADIX = len(CHARS)
+CHARS = ['0', '1']
+RADIX = 2
 ZERO_BIT = '0'
 bits = 8
 
@@ -25,9 +25,17 @@ class UnknownTypeException(Exception):
     pass
 
 
+def bytes_to_long(X):
+    return Crypto.Util.number.bytes_to_long(X)
+
+
+def long_to_bytes(n, blocksize=0):
+    return Crypto.Util.number.long_to_bytes(n, blocksize)
+
+
 class FFXInteger(object):
 
-    def __init__(self, x, radix=RADIX, blocksize=None):
+    def __init__(self, x, radix=2, blocksize=None):
         if type(x) in [int, long]:
             self._x = gmpy.digits(x, radix)
         elif type(x) in [str]:
@@ -37,6 +45,9 @@ class FFXInteger(object):
         else:
             raise UnknownTypeException(type(x))
 
+        if blocksize:
+            self._x = string.rjust(self._x, blocksize, ZERO_BIT)
+            
         self._len = len(self._x)
         self._radix = radix
         self._blocksize = blocksize
@@ -58,11 +69,12 @@ class FFXInteger(object):
         return FFXInteger(retval, self._radix, self._blocksize)
 
     def __eq__(self, other):
-        # print [type(other), other]the weepies
         if type(other) == FFXInteger:
             retval = self.to_int() == other.to_int()
         elif type(other) in [str]:
-            retval = self._x == other
+            retval = (self._x == other)
+        elif type(other) in [int]:
+            retval = (self.to_int() == other)
         else:
             raise UnknownTypeException()
         return retval
@@ -71,11 +83,9 @@ class FFXInteger(object):
         return len(self._x)
 
     def __getitem__(self, i):
-        #print [self._x, i]
         return FFXInteger(self._x[i], self._radix, 1)
 
     def __getslice__(self, i, j):
-        #print ['i','j',i,j]
         return FFXInteger(self._x[i:j], self._radix, len(self._x[i:j]))
 
     def __repr__(self):
@@ -100,15 +110,6 @@ class FFXInteger(object):
         return retval
 
 
-def bytes_to_long(X):
-    return Crypto.Util.number.bytes_to_long(X)
-
-
-def long_to_bytes(n, blocksize=0):
-    return Crypto.Util.number.long_to_bytes(n, blocksize)
-
-
-############
 class FFXEncrypter(object):
 
     def AES_ECB(self, K, X):
@@ -118,7 +119,6 @@ class FFXEncrypter(object):
 
     def CBC_MAC(self, K, X):
         """TODO"""
-        assert(len(X) % 16 == 0)
         m = md5.new()
         m.update(X)
         return m.digest()
@@ -201,16 +201,13 @@ class FFXEncrypter(object):
         P += long_to_bytes(n, 4)
         P += long_to_bytes(t, 4)
 
-        assert len(P) == 16
-
-        #print ['T',T]
         Q = T.to_str()
         Q += FFXInteger(ZERO_BIT, radix=RADIX,
-                        blocksize=(((-1 * len(T)) - 1) % 16) * 8).to_str()
+                        blocksize=(((-1 * len(T)) - b - 1) % 16)).to_str()
         Q += FFXInteger(i, radix=RADIX, blocksize=1).to_str()
         Q += FFXInteger(B, radix=RADIX, blocksize=b).to_str()
 
-        Q = FFXInteger(Q, radix=RADIX)
+        Q = FFXInteger(Q, radix=RADIX, blocksize=16)
         Q = Q.to_bytes()
 
         Y = self.CBC_MAC(K, P + Q)
@@ -218,10 +215,8 @@ class FFXEncrypter(object):
         for i in range(1, RADIX + 1):
             TMP += self.AES_ECB(K.to_bytes(), Y + str(i) * 16)
         TMP = TMP[:d + 4]
-        #print [d, len(TMP)]
 
         y = int(TMP.encode('hex'), base=16)
-        #y = FFXInteger(Y,radix=RADIX,blocksize=m)
         z = y % (RADIX ** m)
 
         return FFXInteger(z, radix=RADIX, blocksize=m)
