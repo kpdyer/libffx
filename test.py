@@ -52,11 +52,12 @@ class TestFFX(unittest.TestCase):
             self.assertEquals(len(X), blocksize)
 
     def testFFXEncrypt1(self):
-        K = FFXInteger('0'*8, radix=2, blocksize=128)
-        T = FFXInteger('0'*8, radix=2, blocksize=8)
-        M1 = FFXInteger('0'*8, radix=2, blocksize=8)
+        radix = 2
+        K = FFXInteger('0'*8, radix=radix, blocksize=128)
+        T = FFXInteger('0'*8, radix=radix, blocksize=8)
+        M1 = FFXInteger('0'*8, radix=radix, blocksize=8)
 
-        ffx = FFX.new()
+        ffx = FFX.new(radix)
         C = ffx.encrypt(K, T, M1)
         M2 = ffx.decrypt(K, T, C)
 

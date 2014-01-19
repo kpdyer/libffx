@@ -9,10 +9,13 @@ import string
 import FFX
 
 
-def random_string(length, chars=FFX.CHARS):
+def random_string(length, radix):
     retval = ''
+    chars = string.digits + string.ascii_letters
+    chars = chars[:radix]
     for i in range(length):
-        retval += random.choice(chars)
+        index = random.randint(0,len(chars)-1)
+        retval += chars[index]
     return retval
 
 
@@ -28,21 +31,21 @@ def main():
              ]
     print ', '.join(banner)
     
-    K = random_string(keysize, ['0', '1'])
+    K = random_string(keysize, 2)
     K = string.rjust(K, keysize, '0')  # must be 128 bits, no matter what
-    K = FFX.FFXInteger(K, radix=radix, blocksize=keysize)
+    K = FFX.FFXInteger(K, radix=2, blocksize=keysize)
         
     for i in range(1,11):
-        T = random_string(messagesize)
-        M1 = random_string(messagesize)
+        T = random_string(tweaksize, radix)
+        M1 = random_string(messagesize, radix)
 
         T = string.rjust(T, tweaksize, '0')
         M1 = string.rjust(M1, messagesize, '0')
 
-        T = FFX.FFXInteger(T, radix=radix, blocksize=messagesize)
+        T = FFX.FFXInteger(T, radix=radix, blocksize=tweaksize)
         M1 = FFX.FFXInteger(M1, radix=radix, blocksize=messagesize)
 
-        ffx = FFX.new()
+        ffx = FFX.new(radix)
         start = time.time()
         C = ffx.encrypt(K, T, M1)
         encrypt_cost = time.time() - start
