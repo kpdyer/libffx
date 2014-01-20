@@ -82,3 +82,8 @@ test #7 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=4b969bd2495c3617
 test #8 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=69b55befdfbdacf7bf12e2cb057b723a, plaintext=8874128c934082f202f8963c4c0ee5e4, ciphertext=0e642513e36016bc670615529b06be15)
 test #9 SUCCESS: (encrypt_cost=0.6ms, decrypt_cost=0.6ms, tweak=e9e74053084efa895f8a74e90349fc90, plaintext=0bc76a380dd83942db3dccb3ed4918dd, ciphertext=5786d6bd86642052786f89f3521ca68d)
 ```
+
+Author
+------
+
+Kevin P. Dyer (kdyer@cs.pdx.edu)
