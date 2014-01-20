@@ -36,7 +36,7 @@ We have our own unit tests.
 In addition, Voltage has provided test vectors, which we've used to validate our implementation: http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
 
 ```
-~/ffx/$ python unittests.py
+$ python unittests.py
 TEST VECTOR #1: radix=10, input=0123456789, tweak=9876543210, encrypted=6124200773
 TEST VECTOR #2: radix=10, input=0123456789, tweak=0, encrypted=2433477484
 TEST VECTOR #3: radix=10, input=314159, tweak=2718281828, encrypted=535005
@@ -53,7 +53,7 @@ Benchmarks
 ----------
 
 ```
-~/ffx/$ python benchmark.py --radix 2 --tweaksize 8 --messagesize 8
+$ python benchmark.py --radix 2 --tweaksize 8 --messagesize 8
 RADIX=2, TWEAKSIZE=8, MESSAGESIZE=8, KEY=0x7fab9cfe5f0b2f4b61fc18fc018e1d66L
 test #1 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.4ms, tweak=00011000, plaintext=11110110, ciphertext=00000101)
 test #2 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.4ms, tweak=10101101, plaintext=01100001, ciphertext=01101001)
@@ -67,7 +67,7 @@ test #9 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.3ms, tweak=00110111, plaint
 ```
 
 ```
-~/ffx/$python benchmark.py --radix 16 --tweaksize 32 --messagesize 32
+$python benchmark.py --radix 16 --tweaksize 32 --messagesize 32
 RADIX=16, TWEAKSIZE=32, MESSAGESIZE=32, KEY=0xa8751544df84f7140eaf36ffe3484cc4L
 test #1 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=47043403a1e3d0eac42a22cd89a43afd, plaintext=245ad41b48838606173a85083717ef69, ciphertext=79aaa17eaf64fe2d7ecba00dac466898)
 test #2 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=1c2d16e0a9e6776117b9cb5d8bcb27e2, plaintext=017c5d0daabe6504e201568bb87a241e, ciphertext=513b96b8ade2d315866a16f3784d141a)
