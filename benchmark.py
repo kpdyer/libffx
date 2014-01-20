@@ -8,16 +8,7 @@ import string
 import argparse
 
 import FFX
-
-
-def random_string(length, radix):
-    retval = ''
-    chars = string.digits + string.ascii_letters
-    chars = chars[:radix]
-    for i in range(length):
-        index = random.randint(0, len(chars) - 1)
-        retval += chars[index]
-    return retval
+from FFX import FFXInteger
 
 
 def main():
@@ -39,9 +30,8 @@ def main():
     trials = args.trials
 
     keysize = 128
-    K = random_string(keysize, 2)
-    K = string.rjust(K, keysize, '0')  # must be 128 bits, no matter what
-    K = FFX.FFXInteger(K, radix=2, blocksize=keysize)
+    K = random.randint(0,radix**keysize-1)
+    K = FFXInteger(K, radix=2, blocksize=keysize)
 
     banner = ['RADIX=' + str(radix),
               'TWEAKSIZE=' + str(tweaksize),
@@ -50,21 +40,19 @@ def main():
               ]
     print ', '.join(banner)
 
+    ffx = FFX.new(radix)
     for i in range(1, trials):
-        T = random_string(tweaksize, radix)
-        M1 = random_string(messagesize, radix)
+        T = random.randint(0,radix**tweaksize-1)
+        T = FFXInteger(T, radix=radix, blocksize=tweaksize)
+        
+        M1 = random.randint(0,radix**messagesize-1)
+        M1 = FFXInteger(M1, radix=radix, blocksize=messagesize)
 
-        T = string.rjust(T, tweaksize, '0')
-        M1 = string.rjust(M1, messagesize, '0')
-
-        T = FFX.FFXInteger(T, radix=radix, blocksize=tweaksize)
-        M1 = FFX.FFXInteger(M1, radix=radix, blocksize=messagesize)
-
-        ffx = FFX.new(radix)
         start = time.time()
         C = ffx.encrypt(K, T, M1)
         encrypt_cost = time.time() - start
         encrypt_cost *= 1000.0
+        
         start = time.time()
         M2 = ffx.decrypt(K, T, C)
         decrypt_cost = time.time() - start
