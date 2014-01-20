@@ -28,7 +28,7 @@ Example Usage
 Unit Tests / Test Vectors
 -------------------------
 We have our own unit tests.
-In addition, Voltage has provided test vectors: http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
+In addition, Voltage has provided test vectors, which we've used to validate our implementation: http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
 
 ```
 ~/ffx/$ python unittests.py
