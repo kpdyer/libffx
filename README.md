@@ -18,7 +18,7 @@ Example Usage
 0000000
 >>> C = ffx.encrypt(K, T, M)
 >>> print C
-00010111
+10100010
 >>> ffx.decrypt(K, T, C)
 00000000
 ```
