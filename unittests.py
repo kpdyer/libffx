@@ -108,7 +108,7 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
         
-    def testVector3(self):
+    def testVector4(self):
         #see aes-ffx-vectors.txt
         
         radix = 10
@@ -123,7 +123,7 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
         
-    def testVector4(self):
+    def testVector5(self):
         #see aes-ffx-vectors.txt
         
         radix = 36
