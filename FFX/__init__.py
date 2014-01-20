@@ -154,7 +154,7 @@ class FFXEncrypter(object):
             raise InvalidRadixException()
 
         self._radix = gmpy.mpz(radix)
-        self._chars = string.digits + string.ascii_letters
+        self._chars = string.digits + string.ascii_lowercase
         self._chars = self._chars[:radix]
         _chars = []
         for c in self._chars:
@@ -185,15 +185,10 @@ class FFXEncrypter(object):
         """TODO"""
         assert (len(X) % 16 == 0), (len(X))
         
-        print [K.to_bytes(),X]
         Y = '\x00' * 16
         while len(X)>0:
             Z = bytes_to_long(Y) ^ bytes_to_long(X[:16])
-            print ['X',len(X[:16]),X[:16]]
-            print ['Y',len(Y),Y]
-            print ['Z',len(hex(Z)),hex(Z)]
             Z = long_to_bytes(Z,16)
-            print ['Z',len(Z),Z]
             Y = self.AES_ECB(K.to_bytes(), Z)
             X = X[16:]
         
@@ -251,11 +246,6 @@ class FFXEncrypter(object):
             P += long_to_bytes(t, 4)
             self._P[n] = P
         
-        Qout = []
-        for c in self._P[n]:
-            Qout.append(bytes_to_long(c))
-        print ['self._P[n]', Qout]
-
         if T == 0:
             Q = ''
         else:
@@ -264,28 +254,10 @@ class FFXEncrypter(object):
         Q += long_to_bytes(i,blocksize=1)
         Q += '\x00' * (b - len(B.to_bytes())) + B.to_bytes()
         
-        Qout = []
-        for c in Q:
-            Qout.append(bytes_to_long(c))
-        print [b, 'Q', Qout]
-        print ['B', B]
-        
-        print T._blocksize, 'er'
         assert len(self._P[n]) == 16, len(self._P[n])
-        assert len(Q) == 16, (len(Q),Qout, (((-1 * t) - b - 1) % 16), (b - len(B.to_bytes())), t, b)
+        assert len(Q) % 16 == 0, len(Q)
         
-        #T is 10
-        #z is 
-        #i is 1
-        #b is 3
-
-        print [len(self._P[n]), len(Q)]
         Y = self.CBC_MAC(K, self._P[n] + Q)
-        
-        Qout = []
-        for c in Y:
-            Qout.append(bytes_to_long(c))
-        print ['CBC_MAC', Qout]
         
         TMP = Y
         for i in range(self._radix):
@@ -299,9 +271,7 @@ class FFXEncrypter(object):
         y = bytes_to_long(TMP)
         z = y % (self._radix ** m)
 
-        retval = FFXInteger(z, radix=self._radix, blocksize=m)
-        print ['F', retval]
-        return retval
+        return FFXInteger(z, radix=self._radix, blocksize=m)
 
     def encrypt(self, K, T, X):
         retval = ''
@@ -313,12 +283,10 @@ class FFXEncrypter(object):
         r = self.rnds(n)
         A = X[:l]
         B = X[l:]
-        print ['r', r]
         for i in range(r):
             C = self.add(A, self.F(K, n, T, i, B))
             A = B
             B = C
-            print [i, A, B]
         
         retval = FFXInteger(str(A) + str(B), radix=self._radix,
                             blocksize=len(A) + len(B))

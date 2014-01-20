@@ -123,6 +123,21 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
         
+    def testVector4(self):
+        #see aes-ffx-vectors.txt
+        
+        radix = 36
+        K = FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
+        T = FFXInteger('TQF9J5QDAGSCSPB1', radix=radix, blocksize=16)
+        M1 = FFXInteger('C4XPWULBM3M863JH', radix=radix, blocksize=16)
+
+        ffx = FFX.new(radix)
+        C = ffx.encrypt(K, T, M1)
+        self.assertEquals(str(C).upper(), 'C8AQ3U846ZWH6QZP')
+        M2 = ffx.decrypt(K, T, C)
+
+        self.assertEquals(M1, M2)
+        
     
 
 if __name__ == '__main__':
