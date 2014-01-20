@@ -36,7 +36,7 @@ def main():
     banner = ['RADIX=' + str(radix),
               'TWEAKSIZE=' + str(tweaksize),
               'MESSAGESIZE=' + str(messagesize),
-              'KEY=' + K.to_hex()
+              'KEY=' + hex(K.to_int())
               ]
     print ', '.join(banner)
 

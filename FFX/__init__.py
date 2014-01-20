@@ -77,7 +77,6 @@ class FFXInteger(object):
 
         self._as_bytes = None
         self._as_int = None
-        self._as_hex = None
 
     def __add__(self, other):
         assert other._radix == self._radix, (other._radix, self._radix)
@@ -115,9 +114,6 @@ class FFXInteger(object):
     def __getslice__(self, i, j):
         return FFXInteger(self._x[i:j], self._radix, len(self._x[i:j]))
 
-    def __repr__(self):
-        return self._x
-
     def __str__(self):
         return self._x
 
@@ -125,11 +121,6 @@ class FFXInteger(object):
         if not self._as_int:
             self._as_int = gmpy.mpz(self._x, self._radix)
         return int(self._as_int)
-
-    def to_hex(self):
-        if not self._as_hex:
-            self._as_hex = gmpy.digits(self.to_int(), 16)
-        return self._as_hex
 
     def to_bytes(self):
         if not self._as_bytes:
@@ -159,7 +150,7 @@ class FFXEncrypter(object):
         self._P = {}
 
     def AES_ECB(self, K, X):
-        assert (len(X) % 16 == 0)
+        assert (len(X) % 16 == 0), (len(X))
 
         if not self._ecb.get(K):
             self._ecb[K] = AES.new(K, AES.MODE_ECB)
