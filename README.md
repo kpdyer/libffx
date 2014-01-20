@@ -67,7 +67,7 @@ test #9 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.3ms, tweak=00110111, plaint
 ```
 
 ```
-$python benchmark.py --radix 16 --tweaksize 32 --messagesize 32
+$ python benchmark.py --radix 16 --tweaksize 32 --messagesize 32
 RADIX=16, TWEAKSIZE=32, MESSAGESIZE=32, KEY=0xa8751544df84f7140eaf36ffe3484cc4L
 test #1 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=47043403a1e3d0eac42a22cd89a43afd, plaintext=245ad41b48838606173a85083717ef69, ciphertext=79aaa17eaf64fe2d7ecba00dac466898)
 test #2 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=1c2d16e0a9e6776117b9cb5d8bcb27e2, plaintext=017c5d0daabe6504e201568bb87a241e, ciphertext=513b96b8ade2d315866a16f3784d141a)

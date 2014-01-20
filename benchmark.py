@@ -19,11 +19,6 @@ def main():
     parser.add_argument("--trials", type=int, default=10, required=False)
     args = parser.parse_args()
 
-    #assert args.radix in range(2, 63)
-    #assert args.tweaksize in range(8, 129)
-    #assert args.tweaksize % 8 == 0
-    #assert args.messagesize in range(8, 129)
-
     radix = args.radix
     tweaksize = args.tweaksize
     messagesize = args.messagesize
