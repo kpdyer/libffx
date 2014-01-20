@@ -11,6 +11,8 @@ import Crypto.Util.number
 from Crypto.Cipher import AES
 
 _gmpy_mpz_type = type(gmpy.mpz(0))
+_gmpy_mpf_type = type(gmpy.mpf(0))
+
 
 def new(radix):
     return FFXEncrypter(radix)
@@ -27,16 +29,6 @@ class UnknownTypeException(Exception):
 class InvalidRadixException(Exception):
     pass
 
-# note that this decorator ignores **kwargs
-def memoize(obj):
-    cache = obj.cache = {}
-
-    @functools.wraps(obj)
-    def memoizer(*args, **kwargs):
-        if args not in cache:
-            cache[args] = obj(*args, **kwargs)
-        return cache[args]
-    return memoizer
 
 def long_to_bytes(N, blocksize=1):
     """Given an input integer ``N``, ``long_to_bytes`` returns the representation of ``N`` in bytes.
@@ -71,6 +63,8 @@ class FFXInteger(object):
         
         if _x_type in [int, long, _gmpy_mpz_type]:
             self._x = gmpy.digits(x, radix)
+        elif _x_type in [float, _gmpy_mpf_type]:
+            self._x = gmpy.digits(gmpy.mpz(x), radix)
         elif _x_type in [str]:
             self._x = x
         elif _x_type in [FFXInteger]:
@@ -80,7 +74,7 @@ class FFXInteger(object):
 
         if blocksize:
             assert len(self._x) <= blocksize, (len(self._x), blocksize)
-            self._x = '0' * (blocksize - len(self._x)) + self._x#
+            self._x = '0' * (blocksize - len(self._x)) + self._x
 
         self._len = len(self._x)
         self._radix = radix
@@ -197,7 +191,7 @@ class FFXEncrypter(object):
         assert X._radix == Y._radix, (X._radix, Y._radix)
         assert X._blocksize == Y._blocksize, (X._blocksize, Y._blocksize)
         
-        retval = ( X.to_int() + Y.to_int() ) % (X._radix ** X._blocksize)
+        retval = ( X.to_int() + Y.to_int() ) % math.pow(X._radix, X._blocksize)
 
         return FFXInteger(retval, X._radix, X._blocksize)
 
@@ -205,11 +199,10 @@ class FFXEncrypter(object):
         assert X._radix == Y._radix, (X._radix, Y._radix)
         assert X._blocksize == Y._blocksize, (X._blocksize, Y._blocksize)
         
-        retval = ( X.to_int() - Y.to_int() ) % (X._radix ** X._blocksize)
+        retval = ( X.to_int() - Y.to_int() ) % math.pow(X._radix, X._blocksize)
 
         return FFXInteger(retval, X._radix, X._blocksize)
 
-    @memoize
     def rnds(self, n):
         """TODO"""
         if n >= 8 and n <= 9:
@@ -224,7 +217,6 @@ class FFXEncrypter(object):
             retval = 12
         return retval
 
-    @memoize
     def split(self, n):
         """TODO"""
         return int(math.floor((n * 1.0) / 2))
@@ -264,7 +256,7 @@ class FFXEncrypter(object):
         TMP = TMP[:(d + 4)]
 
         y = bytes_to_long(TMP)
-        z = y % (self._radix ** m)
+        z = y % math.pow(self._radix, m)
 
         return FFXInteger(z, radix=self._radix, blocksize=m)
 

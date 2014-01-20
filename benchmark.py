@@ -30,7 +30,7 @@ def main():
     trials = args.trials
 
     keysize = 128
-    K = random.randint(0,radix**keysize-1)
+    K = random.randint(0,2**keysize-1)
     K = FFXInteger(K, radix=2, blocksize=keysize)
 
     banner = ['RADIX=' + str(radix),
