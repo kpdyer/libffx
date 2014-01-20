@@ -3,6 +3,9 @@ FFX
 
 This is a python implementation of The FFX Mode of Operation for Format-Preserving Encryption [1,2].
 
+This implementation takes into consideration the addendum in [2]. This implementation has been tested to work with message sizes in [2,...,128] and radix values of [2,...,62]. It uses maximally balanced Feistel with a constant of 10 rounds, indepdenent of messages size, as per [2].
+
+
 * [1] http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec.pdf
 * [2] http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec2.pdf
 
