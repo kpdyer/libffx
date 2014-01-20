@@ -8,18 +8,20 @@ Example Usage
 ```
 >>> import FFX
 >>>
->>> ffx = FFX.new(radix=2)
+>>> ffxObj = FFX.new(radix=2)
 >>>
 >>> K = FFX.FFXInteger('0'*128, radix=2, blocksize=128)
->>> T = FFX.FFXInteger('0'*8, radix=2, blocksize=8)
->>> M = FFX.FFXInteger('0'*8, radix=2, blocksize=8)
+>>> T = FFX.FFXInteger('0'*8,   radix=2, blocksize=8)
+>>> X = FFX.FFXInteger('0'*8,   radix=2, blocksize=8)
 >>>
->>> print M
-0000000
->>> C = ffx.encrypt(K, T, M)
+>>> C = ffxObj.encrypt(K, T, X)
+>>> Y = ffxObj.decrypt(K, T, C)
+>>>
+>>> print X
+00000000
 >>> print C
 10100010
->>> ffx.decrypt(K, T, C)
+>>> print Y
 00000000
 ```
 
