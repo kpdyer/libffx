@@ -50,10 +50,11 @@ def long_to_bytes(N, blocksize=1):
 def bytes_to_long(bytestring):
     """Given a ``bytestring`` returns its integer representation ``N``.
     """
-    
-    retval = gmpy.mpz(bytestring,256)
-    retval = retval * -1 if retval < 0 else retval
-    return retval
+
+    bytestring = '\x00' + bytestring
+    N = int(bytestring.encode('hex'), 16)
+    return N
+
 
 
 class FFXInteger(object):
@@ -76,7 +77,6 @@ class FFXInteger(object):
             assert len(self._x) <= blocksize, (len(self._x), blocksize)
             self._x = '0' * (blocksize - len(self._x)) + self._x
 
-        self._len = len(self._x)
         self._radix = radix
         self._blocksize = blocksize
         
@@ -141,9 +141,10 @@ class FFXInteger(object):
             blocksize = int(len(self._x) / 8.0)
             self._as_bytes = long_to_bytes(self.to_int(), blocksize=blocksize)
         return self._as_bytes
-
+    
     def to_str(self):
         return self._x
+    
 
 
 class FFXEncrypter(object):
@@ -161,6 +162,7 @@ class FFXEncrypter(object):
         self._chars = _chars
         
         self._ecb = {}
+        self._cbc = {}
         self._P = {}
 
     def AES_ECB(self, K, X):
@@ -171,14 +173,27 @@ class FFXEncrypter(object):
             
         return self._ecb[K].encrypt(X)
 
-    def CBC_MAC(self, K, X):
-        """TODO"""
+    def AES_CBC(self, K, X):
         assert (len(X) % 16 == 0)
         
+        if not self._cbc.get(K):
+            self._cbc[K] = AES.new(K, AES.MODE_CBC)
+            
+        return self._cbc[K].encrypt(X)
+
+    def CBC_MAC(self, K, X):
+        """TODO"""
+        assert (len(X) % 16 == 0), (len(X))
+        
+        print [K.to_bytes(),X]
         Y = '\x00' * 16
         while len(X)>0:
             Z = bytes_to_long(Y) ^ bytes_to_long(X[:16])
+            print ['X',len(X[:16]),X[:16]]
+            print ['Y',len(Y),Y]
+            print ['Z',len(hex(Z)),hex(Z)]
             Z = long_to_bytes(Z,16)
+            print ['Z',len(Z),Z]
             Y = self.AES_ECB(K.to_bytes(), Z)
             X = X[16:]
         
@@ -191,38 +206,31 @@ class FFXEncrypter(object):
         assert X._radix == Y._radix, (X._radix, Y._radix)
         assert X._blocksize == Y._blocksize, (X._blocksize, Y._blocksize)
         
-        retval = ( X.to_int() + Y.to_int() ) % math.pow(X._radix, X._blocksize)
-
+        retval = ( X.to_int() + Y.to_int() ) % (X._radix ** X._blocksize)
+        
         return FFXInteger(retval, X._radix, X._blocksize)
 
     def sub(self, X, Y):
         assert X._radix == Y._radix, (X._radix, Y._radix)
         assert X._blocksize == Y._blocksize, (X._blocksize, Y._blocksize)
         
-        retval = ( X.to_int() - Y.to_int() ) % math.pow(X._radix, X._blocksize)
+        retval = ( X.to_int() - Y.to_int() ) % (X._radix ** X._blocksize)
 
         return FFXInteger(retval, X._radix, X._blocksize)
 
     def rnds(self, n):
-        """TODO"""
-        if n >= 8 and n <= 9:
-            retval = 36
-        if n >= 10 and n <= 13:
-            retval = 30
-        if n >= 14 and n <= 19:
-            retval = 24
-        if n >= 20 and n <= 31:
-            retval = 18
-        if n >= 32 and n <= 128:
-            retval = 12
-        return retval
+        return 10
 
     def split(self, n):
         """TODO"""
         return int(math.floor((n * 1.0) / 2))
     
     def F(self, K, n, T, i, B):
-        t = len(T.to_bytes())
+        if T == 0:
+            t = 0
+        else:
+            t = len(T.to_str())
+        
         beta = math.ceil(n / 2.0)
         b = int(math.ceil(beta * math.log(self._radix, 2) / 8.0))
         d = 4 * int(math.ceil(b / 4.0))
@@ -242,39 +250,75 @@ class FFXEncrypter(object):
             P += long_to_bytes(n, 4)
             P += long_to_bytes(t, 4)
             self._P[n] = P
+        
+        Qout = []
+        for c in self._P[n]:
+            Qout.append(bytes_to_long(c))
+        print ['self._P[n]', Qout]
 
-        Q = T.to_bytes()
+        if T == 0:
+            Q = ''
+        else:
+            Q = T.to_str()
         Q += '\x00' * (((-1 * t) - b - 1) % 16)
         Q += long_to_bytes(i,blocksize=1)
-        Q += B.to_bytes()
+        Q += '\x00' * (b - len(B.to_bytes())) + B.to_bytes()
+        
+        Qout = []
+        for c in Q:
+            Qout.append(bytes_to_long(c))
+        print [b, 'Q', Qout]
+        print ['B', B]
+        
+        print T._blocksize, 'er'
+        assert len(self._P[n]) == 16, len(self._P[n])
+        assert len(Q) == 16, (len(Q),Qout, (((-1 * t) - b - 1) % 16), (b - len(B.to_bytes())), t, b)
+        
+        #T is 10
+        #z is 
+        #i is 1
+        #b is 3
 
+        print [len(self._P[n]), len(Q)]
         Y = self.CBC_MAC(K, self._P[n] + Q)
+        
+        Qout = []
+        for c in Y:
+            Qout.append(bytes_to_long(c))
+        print ['CBC_MAC', Qout]
+        
         TMP = Y
         for i in range(self._radix):
             if len(TMP)>=(d + 4):break
-            TMP += self.AES_ECB(K.to_bytes(), self.add(Y, self._chars[i] * 16))
+            left = FFXInteger(bytes_to_long(Y), radix=self._radix, blocksize=32)
+            right = FFXInteger(self._chars[i] * len(left), radix=self._radix, blocksize=len(left))
+            X = self.add(left, right)
+            TMP += self.AES_ECB(K.to_bytes(), X.to_bytes())
         TMP = TMP[:(d + 4)]
 
         y = bytes_to_long(TMP)
-        z = y % math.pow(self._radix, m)
+        z = y % (self._radix ** m)
 
-        return FFXInteger(z, radix=self._radix, blocksize=m)
+        retval = FFXInteger(z, radix=self._radix, blocksize=m)
+        print ['F', retval]
+        return retval
 
     def encrypt(self, K, T, X):
-        """assertions"""
         retval = ''
 
-        assert K._blocksize == 128
+        #assert K._blocksize == 128
 
         n = len(X)
         l = self.split(n)
         r = self.rnds(n)
         A = X[:l]
         B = X[l:]
+        print ['r', r]
         for i in range(r):
             C = self.add(A, self.F(K, n, T, i, B))
             A = B
             B = C
+            print [i, A, B]
         
         retval = FFXInteger(str(A) + str(B), radix=self._radix,
                             blocksize=len(A) + len(B))
@@ -282,10 +326,9 @@ class FFXEncrypter(object):
         return retval
 
     def decrypt(self, K, T, Y):
-        """assertions"""
         retval = ''
 
-        assert K._blocksize == 128
+        #assert K._blocksize == 128
 
         n = len(Y)
         l = self.split(n)
