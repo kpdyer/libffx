@@ -1,13 +1,9 @@
-import math
-import md5
 import string
-import functools
+import math
 import binascii
 
 import gmpy as gmpy
-from gmpy import mpz
 
-import Crypto.Util.number
 from Crypto.Cipher import AES
 
 _gmpy_mpz_type = type(gmpy.mpz(0))
@@ -160,7 +156,6 @@ class FFXEncrypter(object):
         self._chars = _chars
 
         self._ecb = {}
-        self._cbc = {}
         self._P = {}
 
     def AES_ECB(self, K, X):
@@ -170,14 +165,6 @@ class FFXEncrypter(object):
             self._ecb[K] = AES.new(K, AES.MODE_ECB)
 
         return self._ecb[K].encrypt(X)
-
-    def AES_CBC(self, K, X):
-        assert (len(X) % 16 == 0)
-
-        if not self._cbc.get(K):
-            self._cbc[K] = AES.new(K, AES.MODE_CBC)
-
-        return self._cbc[K].encrypt(X)
 
     def CBC_MAC(self, K, X):
         """TODO"""
@@ -277,8 +264,6 @@ class FFXEncrypter(object):
     def encrypt(self, K, T, X):
         retval = ''
 
-        #assert K._blocksize == 128
-
         n = len(X)
         l = self.split(n)
         r = self.rnds(n)
@@ -296,8 +281,6 @@ class FFXEncrypter(object):
 
     def decrypt(self, K, T, Y):
         retval = ''
-
-        #assert K._blocksize == 128
 
         n = len(Y)
         l = self.split(n)

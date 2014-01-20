@@ -78,6 +78,9 @@ class TestFFX(unittest.TestCase):
         M2 = ffx.decrypt(K, T, C)
 
         self.assertEquals(M1, M2)
+        
+        print ''
+        print 'TEST VECTOR #1: radix='+str(radix)+', input='+str(M1)+', tweak='+str(T)+', encrypted='+str(C)
 
     def testVector2(self):
         # see aes-ffx-vectors.txt
@@ -85,7 +88,7 @@ class TestFFX(unittest.TestCase):
         radix = 10
         K = FFXInteger('2b7e151628aed2a6abf7158809cf4f3c',
                        radix=16, blocksize=32)
-        T = FFXInteger(0, radix=radix, blocksize=2)
+        T = 0#FFXInteger(0, radix=radix, blocksize=2)
         M1 = FFXInteger('0123456789', radix=radix, blocksize=10)
 
         ffx = FFX.new(radix)
@@ -94,6 +97,9 @@ class TestFFX(unittest.TestCase):
         M2 = ffx.decrypt(K, T, C)
 
         self.assertEquals(M1, M2)
+        
+        print ''
+        print 'TEST VECTOR #2: radix='+str(radix)+', input='+str(M1)+', tweak='+str(T)+', encrypted='+str(C)
 
     def testVector3(self):
         # see aes-ffx-vectors.txt
@@ -110,6 +116,9 @@ class TestFFX(unittest.TestCase):
         M2 = ffx.decrypt(K, T, C)
 
         self.assertEquals(M1, M2)
+        
+        print ''
+        print 'TEST VECTOR #3: radix='+str(radix)+', input='+str(M1)+', tweak='+str(T)+', encrypted='+str(C)
 
     def testVector4(self):
         # see aes-ffx-vectors.txt
@@ -126,6 +135,9 @@ class TestFFX(unittest.TestCase):
         M2 = ffx.decrypt(K, T, C)
 
         self.assertEquals(M1, M2)
+        
+        print ''
+        print 'TEST VECTOR #4: radix='+str(radix)+', input='+str(M1)+', tweak='+str(T)+', encrypted='+str(C)
 
     def testVector5(self):
         # see aes-ffx-vectors.txt
@@ -142,6 +154,9 @@ class TestFFX(unittest.TestCase):
         M2 = ffx.decrypt(K, T, C)
 
         self.assertEquals(M1, M2)
+        
+        print ''
+        print 'TEST VECTOR #5: radix='+str(radix)+', input='+str(M1)+', tweak='+str(T)+', encrypted='+str(C)
 
 
 if __name__ == '__main__':
