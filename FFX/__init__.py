@@ -159,7 +159,7 @@ class FFXEncrypter(object):
 
     def CBC_MAC(self, K, X):
         """TODO"""
-        assert (len(X) % 16 == 0), (len(X))
+        #assert (len(X) % 16 == 0), (len(X))
 
         Y = '\x00' * 16
         while len(X) > 0:
@@ -231,7 +231,8 @@ class FFXEncrypter(object):
         Q += '\x00' * (b - len(B.to_bytes())) + B.to_bytes()
 
         assert len(self._P[n]) == 16, len(self._P[n])
-        assert len(Q) % 16 == 0, len(Q)
+        #print [len(B.to_bytes()), b, t, Q]
+        #assert len(Q) % 16 == 0, len(Q)
 
         Y = self.CBC_MAC(K, self._P[n] + Q)
 
