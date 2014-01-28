@@ -68,12 +68,10 @@ class FFXInteger(object):
         else:
             raise UnknownTypeException(type(x))
 
-        if blocksize:
-            assert len(self._x) <= blocksize, (len(self._x), blocksize)
-            self._x = '0' * (blocksize - len(self._x)) + self._x
-
         self._radix = radix
-        self._blocksize = blocksize
+        if blocksize:
+            self._blocksize = max(blocksize, len(self._x))
+            self._x = '0' * (blocksize - len(self._x)) + self._x
 
         self._as_bytes = None
         self._as_int = None
@@ -122,9 +120,12 @@ class FFXInteger(object):
             self._as_int = gmpy.mpz(self._x, self._radix)
         return int(self._as_int)
 
-    def to_bytes(self):
+    def to_bytes(self, blocksize=None):
         if not self._as_bytes:
-            blocksize = int(len(self._x) / 8.0)
+            if blocksize is None:
+                blocksize = int(len(self._x) / 8.0)
+            else:
+                blocksize = blocksize
             self._as_bytes = long_to_bytes(self.to_int(), blocksize=blocksize)
         return self._as_bytes
 
@@ -245,7 +246,7 @@ class FFXEncrypter(object):
             right = FFXInteger(
                 self._chars[i] * len(left), radix=self._radix, blocksize=len(left))
             X = self.add(left, right)
-            TMP += self.AES_ECB(K.to_bytes(), X.to_bytes())
+            TMP += self.AES_ECB(K.to_bytes(16), X.to_bytes(16))
         TMP = TMP[:(d + 4)]
 
         y = bytes_to_long(TMP)
