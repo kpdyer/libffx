@@ -123,7 +123,12 @@ class FFXInteger(object):
     def to_bytes(self, blocksize=None):
         if not self._as_bytes:
             if blocksize is None:
-                blocksize = int(len(self._x) / 8.0)
+                blocksize = 1
+                if self.to_int()>0:
+                    blocksize = math.log(self.to_int(),2)
+                blocksize /= 8
+                blocksize = math.ceil(blocksize)
+                blocksize = int(blocksize)
             else:
                 blocksize = blocksize
             self._as_bytes = long_to_bytes(self.to_int(), blocksize=blocksize)
@@ -166,7 +171,7 @@ class FFXEncrypter(object):
         while len(X) > 0:
             Z = bytes_to_long(Y) ^ bytes_to_long(X[:16])
             Z = long_to_bytes(Z, 16)
-            Y = self.AES_ECB(K.to_bytes(), Z)
+            Y = self.AES_ECB(K.to_bytes(16), Z)
             X = X[16:]
 
         return Y
@@ -218,7 +223,7 @@ class FFXEncrypter(object):
             P += '\x01'  # addition
             P += long_to_bytes(self._radix, 3)
             P += long_to_bytes(self.rnds(n), 1)
-            P += long_to_bytes(self.split(n), 1)
+            P += long_to_bytes(self.split(n), 1)[-1:]
             P += long_to_bytes(n, 4)
             P += long_to_bytes(t, 4)
             self._P[n] = P
@@ -232,8 +237,6 @@ class FFXEncrypter(object):
         Q += '\x00' * (b - len(B.to_bytes())) + B.to_bytes()
 
         assert len(self._P[n]) == 16, len(self._P[n])
-        #print [len(B.to_bytes()), b, t, Q]
-        #assert len(Q) % 16 == 0, len(Q)
 
         Y = self.CBC_MAC(K, self._P[n] + Q)
 
