@@ -72,6 +72,8 @@ class FFXInteger(object):
         if blocksize:
             self._blocksize = max(blocksize, len(self._x))
             self._x = '0' * (blocksize - len(self._x)) + self._x
+        else:
+            self._blocksize = len(self._x)
 
         self._as_bytes = None
         self._as_int = None
