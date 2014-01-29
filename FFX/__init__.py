@@ -101,6 +101,8 @@ class FFXInteger(object):
             retval = (self._x == other)
         elif type(other) in [int]:
             retval = (self.to_int() == other)
+        elif type(other) in [type(None)]:
+            retval = False
         else:
             raise UnknownTypeException()
         return retval
