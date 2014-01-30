@@ -15,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--radix", type=int, default=2)
     parser.add_argument("--tweaksize", type=int, default=8)
-    parser.add_argument("--messagesize", type=int, default=8)
+    parser.add_argument("--messagesize", type=int, default=32)
     parser.add_argument("--trials", type=int, default=10, required=False)
     args = parser.parse_args()
 
