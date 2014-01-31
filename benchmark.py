@@ -35,7 +35,7 @@ def main():
               ]
     print ', '.join(banner)
 
-    ffx = FFX.new(radix)
+    ffx = FFX.new(K.to_bytes(16), radix)
     for i in range(1, trials):
         T = random.randint(0, radix ** tweaksize - 1)
         T = FFXInteger(T, radix=radix, blocksize=tweaksize)
@@ -44,12 +44,12 @@ def main():
         M1 = FFXInteger(M1, radix=radix, blocksize=messagesize) 
 
         start = time.time()
-        C = ffx.encrypt(K, T, M1)
+        C = ffx.encrypt(T, M1)
         encrypt_cost = time.time() - start
         encrypt_cost *= 1000.0
 
         start = time.time()
-        M2 = ffx.decrypt(K, T, C)
+        M2 = ffx.decrypt(T, C)
         decrypt_cost = time.time() - start
         decrypt_cost *= 1000.0
 

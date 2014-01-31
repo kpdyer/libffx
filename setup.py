@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
+from Cython.Build import cythonize
 
 setup(name='FFX',
-      description='FFX',
-      author='Kevin P. Dyer',
-      author_email='kpdyer@gmail.com',
-      url='https://github.com/kpdyer/ffx',
-      packages=['FFX'],
+extra_build_args=['-O3'],
+ ext_modules = cythonize("FFX/__init__.pyx"),
       )
