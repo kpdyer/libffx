@@ -14,7 +14,6 @@ class TestFFX(unittest.TestCase):
         Y = FFXInteger('1')
 
         self.assertEquals(X + Y, 2)
-        self.assertEquals(X + Y, '10')
         self.assertEquals(X + Y, FFXInteger('10'))
 
     def testFFXInteger2(self):
@@ -22,7 +21,6 @@ class TestFFX(unittest.TestCase):
         Y = FFXInteger('111')
 
         self.assertEquals(X + Y, 7)
-        self.assertEquals(X + Y, '111')
         self.assertEquals(X + Y, FFXInteger('111'))
 
     def testFFXInteger3(self):

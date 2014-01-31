@@ -41,7 +41,7 @@ def main():
         T = FFXInteger(T, radix=radix, blocksize=tweaksize)
 
         M1 = random.randint(0, radix ** messagesize - 1)
-        M1 = FFXInteger(M1, radix=radix, blocksize=messagesize)
+        M1 = FFXInteger(M1, radix=radix, blocksize=messagesize) 
 
         start = time.time()
         C = ffx.encrypt(K, T, M1)

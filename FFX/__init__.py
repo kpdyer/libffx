@@ -1,13 +1,14 @@
 import string
 import math
 import binascii
+import functools
 
 import gmpy as gmpy
 
 from Crypto.Cipher import AES
 
 _gmpy_mpz_type = type(gmpy.mpz(0))
-#_gmpy_mpf_type = type(gmpy.mpf(0))
+_gmpy_mpf_type = type(gmpy.mpf(0))
 
 
 def new(radix):
@@ -31,10 +32,10 @@ def long_to_bytes(N, blocksize=1):
     If ``blocksize`` is greater than ``1`` then the output string will be right justified and then padded with zero-bytes,
     such that the return values length is a multiple of ``blocksize``.
     """
-
+    
     if type(N) == FFXInteger:
-        return N.to_bytes(blocksize)
-
+        return N.to_bytes()
+    
     bytestring = gmpy.digits(N, 16)
     bytestring = '0' + bytestring if (len(bytestring) % 2) != 0 else bytestring
     bytestring = binascii.unhexlify(bytestring)
@@ -44,7 +45,6 @@ def long_to_bytes(N, blocksize=1):
             (blocksize - (len(bytestring) % blocksize)) + bytestring
 
     return bytestring
-
 
 def bytes_to_long(bytestring):
     """Given a ``bytestring`` returns its integer representation ``N``.
@@ -63,12 +63,12 @@ class FFXInteger(object):
         
         if _x_type in [_gmpy_mpz_type, int, long]:
             self._x = gmpy.digits(x, radix)
-        #elif _x_type in [float, _gmpy_mpf_type]:
-        #    self._x = gmpy.digits(gmpy.mpz(x), radix)
-        elif _x_type in [str]:
-            self._x = x
         elif _x_type in [FFXInteger]:
             self._x = x._x
+        elif _x_type in [str]:
+            self._x = x
+        elif _x_type in [float, _gmpy_mpf_type]:
+            self._x = gmpy.digits(gmpy.mpz(x), radix)
         else:
             raise UnknownTypeException(type(x))
 
@@ -81,6 +81,7 @@ class FFXInteger(object):
 
         self._as_bytes = None
         self._as_int = None
+        self._len = None
 
     def __add__(self, other):
         retval = self.to_int()
@@ -88,7 +89,7 @@ class FFXInteger(object):
             retval += other.to_int()
         else:
             retval += other
-        return FFXInteger(retval,radix=self._radix)
+        return retval
 
     def __sub__(self, other):
         retval = self.to_int()
@@ -96,7 +97,7 @@ class FFXInteger(object):
             retval -= other.to_int()
         else:
             retval -= other
-        return FFXInteger(retval,radix=self._radix)
+        return retval
 
     def __mod__(self, other):
         retval = self.to_int()
@@ -104,7 +105,7 @@ class FFXInteger(object):
             retval %= other.to_int()
         else:
             retval %= other
-        return FFXInteger(retval,radix=self._radix)
+        return retval
 
     def __eq__(self, other):
         if type(other) == FFXInteger:
@@ -120,7 +121,9 @@ class FFXInteger(object):
         return retval
 
     def __len__(self):
-        return len(self._x)
+        if self._len == None:
+            self._len = len(self._x)
+        return self._len
 
     def __getitem__(self, i):
         return FFXInteger(self._x[i], self._radix, 1)
@@ -173,8 +176,6 @@ class FFXEncrypter(object):
         self._P = {}
 
     def AES_ECB(self, K, X):
-        assert (len(X) % 16 == 0), (len(X))
-
         if not self._ecb.get(K):
             self._ecb[K] = AES.new(K, AES.MODE_ECB)
 
@@ -196,11 +197,11 @@ class FFXEncrypter(object):
     def isEven(self, n):
         return not ((n & 0x1) == 1)
 
-    def add(self, X, Y):
+    def add(self, X, Y, n):
         retval = (X + Y) % (X._radix ** (X._blocksize))
         return FFXInteger(retval, radix=self._radix, blocksize=X._blocksize)
 
-    def sub(self, X, Y):
+    def sub(self, X, Y, n):
         retval = (X - Y) % (X._radix ** (X._blocksize))
         return FFXInteger(retval, radix=self._radix, blocksize=X._blocksize)
 
@@ -264,7 +265,7 @@ class FFXEncrypter(object):
         y = bytes_to_long(TMP)
         z = y % (self._radix ** m)
 
-        return FFXInteger(z, radix=self._radix, blocksize=m)
+        return z
 
     def encrypt(self, K, T, X):
         retval = ''
@@ -275,18 +276,17 @@ class FFXEncrypter(object):
         A = X[:l]
         B = X[l:]
         for i in range(r):
-            C = self.add(A, self.F(K, n, T, i, B))
+            C = self.add(A, self.F(K, n, T, i, B), n)
             A = B
             B = C
 
-        retval = FFXInteger(str(A) + str(B), radix=self._radix,
-                            blocksize=len(A) + len(B))
-
+        retval = FFXInteger(A.to_str() + B.to_str(), radix=self._radix)
+        
         return retval
 
     def decrypt(self, K, T, Y):
         retval = ''
-
+        
         n = len(Y)
         l = self.split(n)
         r = self.rnds(n)
@@ -296,9 +296,8 @@ class FFXEncrypter(object):
         for i in range(r - 1, -1, -1):
             C = B
             B = A
-            A = self.sub(C, self.F(K, n, T, i, B))
-
-        retval = FFXInteger(str(A) + str(B), radix=self._radix,
-                            blocksize=len(A) + len(B))
+            A = self.sub(C, self.F(K, n, T, i, B), n)
+            
+        retval = FFXInteger(A.to_str() + B.to_str(), radix=self._radix)
 
         return retval
