@@ -35,7 +35,7 @@ def main():
               ]
     print ', '.join(banner)
 
-    ffx = FFX.new(K.to_bytes(16), radix)
+    ffx = FFX.new(K.to_bytes(), radix)
     for i in range(1, trials):
         T = random.randint(0, radix ** tweaksize - 1)
         T = FFXInteger(T, radix=radix, blocksize=tweaksize)
