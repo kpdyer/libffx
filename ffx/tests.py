@@ -3,8 +3,8 @@
 
 import unittest
 
-import FFX
-from FFX import FFXInteger
+import ffx
+from ffx import FFXInteger
 
 
 class TestFFX(unittest.TestCase):
@@ -55,9 +55,9 @@ class TestFFX(unittest.TestCase):
         T = FFXInteger('0' * 8, radix=radix, blocksize=8)
         M1 = FFXInteger('0' * 8, radix=radix, blocksize=8)
 
-        ffx = FFX.new(K.to_bytes(16), radix)
-        C = ffx.encrypt(T, M1)
-        M2 = ffx.decrypt(T, C)
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
+        M2 = ffx_obj.decrypt(T, C)
 
         self.assertEquals(M1, M2)
 
@@ -70,10 +70,10 @@ class TestFFX(unittest.TestCase):
         T = FFXInteger('9876543210', radix=radix, blocksize=10)
         M1 = FFXInteger('0123456789', radix=radix, blocksize=10)
 
-        ffx = FFX.new(K.to_bytes(16), radix)
-        C = ffx.encrypt(T, M1)
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
         self.assertEquals(C, '6124200773')
-        M2 = ffx.decrypt(T, C)
+        M2 = ffx_obj.decrypt(T, C)
 
         self.assertEquals(M1, M2)
 
@@ -89,10 +89,10 @@ class TestFFX(unittest.TestCase):
         T = 0  # FFXInteger(0, radix=radix, blocksize=2)
         M1 = FFXInteger('0123456789', radix=radix, blocksize=10)
 
-        ffx = FFX.new(K.to_bytes(16), radix)
-        C = ffx.encrypt(T, M1)
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
         self.assertEquals(C, '2433477484')
-        M2 = ffx.decrypt(T, C)
+        M2 = ffx_obj.decrypt(T, C)
 
         self.assertEquals(M1, M2)
 
@@ -108,10 +108,10 @@ class TestFFX(unittest.TestCase):
         T = FFXInteger('2718281828', radix=radix, blocksize=10)
         M1 = FFXInteger('314159', radix=radix, blocksize=6)
 
-        ffx = FFX.new(K.to_bytes(16), radix)
-        C = ffx.encrypt(T, M1)
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
         self.assertEquals(C, '535005')
-        M2 = ffx.decrypt(T, C)
+        M2 = ffx_obj.decrypt(T, C)
 
         self.assertEquals(M1, M2)
 
@@ -127,10 +127,10 @@ class TestFFX(unittest.TestCase):
         T = FFXInteger('7777777', radix=radix, blocksize=7)
         M1 = FFXInteger('999999999', radix=radix, blocksize=9)
 
-        ffx = FFX.new(K.to_bytes(16), radix)
-        C = ffx.encrypt(T, M1)
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
         self.assertEquals(C, '658229573')
-        M2 = ffx.decrypt(T, C)
+        M2 = ffx_obj.decrypt(T, C)
 
         self.assertEquals(M1, M2)
 
@@ -146,10 +146,10 @@ class TestFFX(unittest.TestCase):
         T = FFXInteger('TQF9J5QDAGSCSPB1', radix=radix, blocksize=16)
         M1 = FFXInteger('C4XPWULBM3M863JH', radix=radix, blocksize=16)
 
-        ffx = FFX.new(K.to_bytes(16), radix)
-        C = ffx.encrypt(T, M1)
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
         self.assertEquals(str(C).upper(), 'C8AQ3U846ZWH6QZP')
-        M2 = ffx.decrypt(T, C)
+        M2 = ffx_obj.decrypt(T, C)
 
         self.assertEquals(M1, M2)
 

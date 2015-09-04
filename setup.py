@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(name='ffx',
       install_requires=['gmpy'],
-      test_suite = 'FFX.tests',
+      test_suite = 'ffx.tests',
       version='0.0.1',
       description='FFX',
       author='Kevin P. Dyer',
