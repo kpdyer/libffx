@@ -1,6 +1,8 @@
 FFX
 ===
 
+[![Build Status](https://travis-ci.org/kpdyer/libffx.svg?branch=master)](https://travis-ci.org/kpdyer/libffx)
+
 This is a python implementation of The FFX Mode of Operation for Format-Preserving Encryption [1,2].
 
 This implementation takes into consideration the addendum in [2]. This implementation has been tested to work with message sizes in {2,...,128} and radix values of {2,...,62}. It uses maximally-balanced Feistel with a constant of 10 rounds, indepdenent of messages size, as per [2].
