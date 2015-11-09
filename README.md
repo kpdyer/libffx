@@ -18,14 +18,14 @@ Example Usage
 ```
 >>> import ffx
 >>>
->>> ffxObj = ffx.new(radix=2)
->>>
 >>> K = ffx.FFXInteger('0'*128, radix=2, blocksize=128)
 >>> T = ffx.FFXInteger('0'*8,   radix=2, blocksize=8)
 >>> X = ffx.FFXInteger('0'*8,   radix=2, blocksize=8)
 >>>
->>> C = ffxObj.encrypt(K, T, X)
->>> Y = ffxObj.decrypt(K, T, C)
+>>> ffxObj = ffx.new(K, radix=2)
+>>>
+>>> C = ffxObj.encrypt(T, X)
+>>> Y = ffxObj.decrypt(T, C)
 >>>
 >>> print X
 00000000
