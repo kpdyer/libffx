@@ -7,8 +7,8 @@ import random
 import string
 import argparse
 
-import FFX
-from FFX import FFXInteger
+import ffx 
+from ffx import FFXInteger
 
 
 def main():
@@ -35,7 +35,7 @@ def main():
               ]
     print ', '.join(banner)
 
-    ffx = FFX.new(K.to_bytes(), radix)
+    ffx_obj = ffx.new(K.to_bytes(), radix)
     for i in range(1, trials):
         T = random.randint(0, radix ** tweaksize - 1)
         T = FFXInteger(T, radix=radix, blocksize=tweaksize)
@@ -44,12 +44,12 @@ def main():
         M1 = FFXInteger(M1, radix=radix, blocksize=messagesize) 
 
         start = time.time()
-        C = ffx.encrypt(T, M1)
+        C = ffx_obj.encrypt(T, M1)
         encrypt_cost = time.time() - start
         encrypt_cost *= 1000.0
 
         start = time.time()
-        M2 = ffx.decrypt(T, C)
+        M2 = ffx_obj.decrypt(T, C)
         decrypt_cost = time.time() - start
         decrypt_cost *= 1000.0
 
