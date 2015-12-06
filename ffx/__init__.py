@@ -202,7 +202,7 @@ class FFXEncrypter(object):
             t = len(T)
 
         beta = math.ceil(n / 2.0)
-        b = int(math.ceil(beta * math.log(self._radix, 2) / 8.0))
+        b = int(math.ceil(math.ceil(beta * math.log(self._radix, 2)) / 8.0))
         d = 4 * int(math.ceil(b / 4.0))
 
         if self.isEven(i):
@@ -231,9 +231,13 @@ class FFXEncrypter(object):
         
         _B_as_bytes = long_to_bytes(B)
         Q += '\x00' * (b - len(_B_as_bytes))
-        Q += _B_as_bytes
+        Q += _B_as_bytes[-b:]
 
         _cbc = AES.new(self._K, AES.MODE_CBC, '\x00' * 16)
+
+        assert len(self._P[n]) % 16 == 0
+        assert len(Q) % 16 == 0
+
         Y = _cbc.encrypt(self._P[n] + Q)[-16:]
 
         i = 1
