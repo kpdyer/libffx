@@ -157,9 +157,11 @@ class TestFFX(unittest.TestCase):
         print 'TEST VECTOR #5: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
 
     def testLongToBytes(self):
+        """Due to Issue#5"""
         self.assertEquals(ffx.long_to_bytes(65536), '\x01\x00\x00')
 
     def testPtxtPowerOf2(self):
+        """Due to Issue#5"""
         plain = ffx.FFXInteger('0000065536', radix=10)
         tweak = ffx.FFXInteger('0000000000', radix=10)
         key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
@@ -167,6 +169,20 @@ class TestFFX(unittest.TestCase):
         ffx_obj = ffx.new(key.to_bytes(16), radix=10)
         ctxt = ffx_obj.encrypt(tweak, plain)
         self.assertEquals(ffx_obj.decrypt(tweak, ctxt), plain)
+
+    def testKeyWithLeadingNullByte1(self):
+        """Due to Issue#2"""
+        ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize = 128)
+        key_len = len(ffx_key.to_bytes())
+        print [ffx_key.to_bytes()]
+        self.assertEquals(key_len, 16)
+
+    def testKeyWithLeadingNullByte2(self):
+        """Due to Issue#2"""
+        ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize = 128)
+        key_len = len(ffx_key.to_bytes(16))
+        self.assertEquals(key_len, 16)
+
 
 
 if __name__ == '__main__':

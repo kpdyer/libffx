@@ -78,7 +78,7 @@ class FFXInteger(object):
             self._blocksize = max(blocksize, len(self._x))
             self._x = '0' * (blocksize - len(self._x)) + self._x
         else:
-            self._blocksize = len(self._x)
+            self._blocksize = None
 
         self._as_bytes = None
         self._as_int = None
@@ -144,6 +144,11 @@ class FFXInteger(object):
         return int(self._x, self._radix)
 
     def to_bytes(self, blocksize=None):
+        if blocksize is None and self._blocksize is not None:
+            blocksize = self._radix ** self._blocksize - 1
+            blocksize = math.log(blocksize, 256)
+            blocksize = math.ceil(blocksize)
+            blocksize = int(blocksize)
         if not self._as_bytes:
             if blocksize is None:
                 blocksize = 1
