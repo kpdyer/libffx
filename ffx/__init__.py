@@ -167,7 +167,7 @@ class FFXInteger(object):
 class FFXEncrypter(object):
 
     def __init__(self, K, radix):
-        if radix not in range(2, 26 + 26 + 10 + 1):
+        if radix not in range(2, 37):
             raise InvalidRadixException()
 
         self._radix = gmpy.mpz(radix)
