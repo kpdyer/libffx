@@ -22,7 +22,7 @@ Example Usage
 >>> T = ffx.FFXInteger('0'*8,   radix=2, blocksize=8)
 >>> X = ffx.FFXInteger('0'*8,   radix=2, blocksize=8)
 >>>
->>> ffxObj = ffx.new(K, radix=2)
+>>> ffxObj = ffx.new(K.to_bytes(16), radix=2)
 >>>
 >>> C = ffxObj.encrypt(T, X)
 >>> Y = ffxObj.decrypt(T, C)
