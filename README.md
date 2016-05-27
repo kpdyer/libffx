@@ -41,7 +41,7 @@ We have our own unit tests.
 In addition, Voltage has provided test vectors, which we've used to validate our implementation: http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
 
 ```
-$ python unittests.py
+$ python setup.py test
 TEST VECTOR #1: radix=10, input=0123456789, tweak=9876543210, encrypted=6124200773
 TEST VECTOR #2: radix=10, input=0123456789, tweak=0, encrypted=2433477484
 TEST VECTOR #3: radix=10, input=314159, tweak=2718281828, encrypted=535005
