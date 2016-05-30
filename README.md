@@ -24,14 +24,14 @@ Example Usage
 >>>
 >>> ffxObj = ffx.new(K.to_bytes(16), radix=2)
 >>>
->>> C = ffxObj.encrypt(T, X)
->>> Y = ffxObj.decrypt(T, C)
+>>> Y = ffxObj.encrypt(T, X)
+>>> X1 = ffxObj.decrypt(T, Y)
 >>>
 >>> print X
 00000000
->>> print C
-10100010
 >>> print Y
+10100010
+>>> print X1
 00000000
 ```
 
