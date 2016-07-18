@@ -183,6 +183,39 @@ class TestFFX(unittest.TestCase):
         key_len = len(ffx_key.to_bytes(16))
         self.assertEquals(key_len, 16)
 
+    def testVectorYexpansion1(self):
+        radix = 16
+        K = FFXInteger('0'*32,
+                       radix=radix, blocksize=32)
+        T = 0  # FFXInteger(0, radix=radix, blocksize=2)
+        M1 = FFXInteger('0'*48, radix=radix, blocksize=48)
+
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
+        self.assertEquals(C, 'ddb77d3be91a8e255fca9389a3d48da2b4476919744febea')
+        M2 = ffx_obj.decrypt(T, C)
+
+        self.assertEquals(M1, M2)
+
+        print ''
+        print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+
+    def testVectorYexpansion2(self):
+        radix = 16
+        K = FFXInteger('0'*32,
+                       radix=radix, blocksize=32)
+        T = 0  # FFXInteger(0, radix=radix, blocksize=2)
+        M1 = FFXInteger('0'*49, radix=radix, blocksize=49)
+
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
+        self.assertEquals(C, '1f7b9459d22b2bee17d5b5616e03241467767c9dcbc424c21')
+        M2 = ffx_obj.decrypt(T, C)
+
+        self.assertEquals(M1, M2)
+
+        print ''
+        print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
 
 
 if __name__ == '__main__':

@@ -248,10 +248,8 @@ class FFXEncrypter(object):
         i = 1
         TMP = Y
         while len(TMP) < (d + 4):
-            left = FFXInteger(bytes_to_long(Y), radix=self._radix, blocksize=32)
-            right = FFXInteger(str(i), radix=10, blocksize=16)
-            X = self.add(left, right)
-            TMP += self._ecb.encrypt(X.to_bytes(16))
+            X = bytes_to_long(Y) ^ i
+            TMP += self._ecb.encrypt(long_to_bytes(X))
             i += 1
 
         y = bytes_to_long(TMP[:(d + 4)])
