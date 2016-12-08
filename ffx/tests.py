@@ -217,6 +217,21 @@ class TestFFX(unittest.TestCase):
         print ''
         print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
 
+    def testValueErrorDueToBlockSize(self):
+        radix = 36
+        K = FFXInteger('1868ea98ae122d5cd15f1802c0b37d75',
+                       radix=radix, blocksize=32)
+        T = 0  # FFXInteger(0, radix=radix, blocksize=2)
+        M1 = FFXInteger('nuqjmul7us7dnw4euymifiyomk0p21sigolw5egtvvg', radix=radix, blocksize=43)
+
+        ffx_obj = ffx.new(K.to_bytes(16), radix)
+        C = ffx_obj.encrypt(T, M1)
+        M2 = ffx_obj.decrypt(T, C)
+
+        self.assertEquals(M1, M2)
+
+        print ''
+        print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
 
 if __name__ == '__main__':
     unittest.main()
