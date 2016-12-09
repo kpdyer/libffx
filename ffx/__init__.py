@@ -1,12 +1,10 @@
 import string
 import math
 import binascii
-import functools
 
 import gmpy as gmpy
 
 from Crypto.Cipher import AES
-from Crypto.Util import Counter
 
 _gmpy_mpz_type = type(gmpy.mpz(0))
 _gmpy_mpf_type = type(gmpy.mpf(0))
@@ -33,7 +31,7 @@ def long_to_bytes(N, blocksize=1):
     If ``blocksize`` is greater than ``1`` then the output string will be right justified and then padded with zero-bytes,
     such that the return values length is a multiple of ``blocksize``.
     """
-    
+
     if type(N) == FFXInteger:
         return N.to_bytes()
     
@@ -141,22 +139,17 @@ class FFXInteger(object):
     def to_int(self):
         if not self._as_int:
             self._as_int = int(self._x, self._radix)
-        return int(self._x, self._radix)
+        return self._as_int
 
     def to_bytes(self, blocksize=None):
         if blocksize is None and self._blocksize is not None:
-            blocksize = self._radix ** self._blocksize - 1
-            blocksize = math.log(blocksize, 256)
-            blocksize = math.ceil(blocksize)
-            blocksize = int(blocksize)
+            blocksize = (self._radix ** self._blocksize - 1).bit_length() / 8
         if not self._as_bytes:
             if blocksize is None:
                 blocksize = 1
                 if self.to_int()>0:
-                    blocksize = math.log(self.to_int(),2)
+                    blocksize = self.to_int().bit_length()
                 blocksize /= 8
-                blocksize = math.ceil(blocksize)
-                blocksize = int(blocksize)
             self._as_bytes = long_to_bytes(self.to_int(), blocksize=blocksize)
         return self._as_bytes
 
