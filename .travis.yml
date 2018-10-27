@@ -2,12 +2,15 @@ language:
   - python
 compiler:
   - gcc
-  - clang 
+  - clang
 before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -y libgmp-dev
 python:
   - "2.7"
+  - "3.5"
+  - "3.6"
+  - "3.7"
 install:
   - "pip install -r requirements.txt"
 script:

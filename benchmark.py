@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+from __future__ import print_function
 import time
-import math
 import random
 import string
 import argparse
 
-import ffx 
+import ffx
 from ffx import FFXInteger
+from six.moves import range
 
 
 def main():
@@ -33,7 +35,7 @@ def main():
               'MESSAGESIZE=' + str(messagesize),
               'KEY=' + hex(K.to_int())
               ]
-    print ', '.join(banner)
+    print(', '.join(banner))
 
     ffx_obj = ffx.new(K.to_bytes(), radix)
     for i in range(1, trials):
@@ -41,7 +43,7 @@ def main():
         T = FFXInteger(T, radix=radix, blocksize=tweaksize)
 
         M1 = random.randint(0, radix ** messagesize - 1)
-        M1 = FFXInteger(M1, radix=radix, blocksize=messagesize) 
+        M1 = FFXInteger(M1, radix=radix, blocksize=messagesize)
 
         start = time.time()
         C = ffx_obj.encrypt(T, M1)
@@ -61,7 +63,7 @@ def main():
                     'plaintext=' + str(M1),
                     'ciphertext=' + str(C),
                     ]
-        print 'test #' + string.rjust(str(i), len(str(trials - 1)), '0') + ' SUCCESS: (' + ', '.join(to_print) + ')'
+        print('test #' + string.rjust(str(i), len(str(trials - 1)), '0') + ' SUCCESS: (' + ', '.join(to_print) + ')')
 
 
 if __name__ == "__main__":

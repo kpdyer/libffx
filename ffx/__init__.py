@@ -1,10 +1,14 @@
+from __future__ import absolute_import
+
 import string
 import math
 import binascii
+import six
 
 import gmpy as gmpy
 
 from Crypto.Cipher import AES
+from six.moves import range
 
 _gmpy_mpz_type = type(gmpy.mpz(0))
 _gmpy_mpf_type = type(gmpy.mpf(0))
@@ -27,31 +31,34 @@ class InvalidRadixException(Exception):
 
 
 def long_to_bytes(N, blocksize=1):
-    """Given an input integer ``N``, ``long_to_bytes`` returns the representation of ``N`` in bytes.
-    If ``blocksize`` is greater than ``1`` then the output string will be right justified and then padded with zero-bytes,
-    such that the return values length is a multiple of ``blocksize``.
+    """Given an input integer ``N``, ``long_to_bytes`` returns
+    the representation of ``N`` in bytes. If ``blocksize`` is greater
+    than ``1`` then the output string will be right justified and then padded
+    with zero-bytes, such that the return values length is a multiple
+    of ``blocksize``.
     """
 
     if type(N) == FFXInteger:
         return N.to_bytes()
-    
+
     bytestring = gmpy.digits(N, 16)
     bytestring = '0' + bytestring if (len(bytestring) % 2) != 0 else bytestring
     bytestring = binascii.unhexlify(bytestring)
 
-    if blocksize>0 and (len(bytestring) % blocksize) != 0:
-        bytestring = '\x00' * \
-            (blocksize - (len(bytestring) % blocksize)) + bytestring
+    if blocksize > 0 and (len(bytestring) % blocksize) != 0:
+        bytestring = six.b('\x00') * \
+            (blocksize - len(bytestring) % blocksize) + bytestring
 
     return bytestring
+
 
 def bytes_to_long(bytestring):
     """Given a ``bytestring`` returns its integer representation ``N``.
     """
-    
+
     N = binascii.hexlify(bytestring)
     N = gmpy.mpz(N, 16)
-    
+
     return N
 
 
@@ -59,8 +66,8 @@ class FFXInteger(object):
 
     def __init__(self, x, radix=2, blocksize=None):
         _x_type = type(x)
-        
-        if _x_type in [_gmpy_mpz_type, int, long]:
+
+        if _x_type in six.integer_types or _x_type in [_gmpy_mpz_type]:
             self._x = gmpy.digits(x, radix)
         elif _x_type in [FFXInteger]:
             self._x = x._x
@@ -120,7 +127,7 @@ class FFXInteger(object):
         return retval
 
     def __len__(self):
-        if self._len == None:
+        if self._len is None:
             self._len = len(self._x)
         return self._len
 
@@ -132,7 +139,7 @@ class FFXInteger(object):
 
     def __str__(self):
         return self._x
-    
+
     def __repr__(self):
         return self.to_str()
 
@@ -143,13 +150,13 @@ class FFXInteger(object):
 
     def to_bytes(self, blocksize=None):
         if blocksize is None and self._blocksize is not None:
-            blocksize = (self._radix ** self._blocksize - 1).bit_length() / 8
+            blocksize = (self._radix ** self._blocksize - 1).bit_length() // 8
         if not self._as_bytes:
             if blocksize is None:
                 blocksize = 1
-                if self.to_int()>0:
+                if self.to_int() > 0:
                     blocksize = self.to_int().bit_length()
-                blocksize /= 8
+                blocksize //= 8
             self._as_bytes = long_to_bytes(self.to_int(), blocksize=blocksize)
         return self._as_bytes
 
@@ -209,29 +216,29 @@ class FFXEncrypter(object):
             m = int(math.ceil(n / 2.0))
 
         if not self._P.get(n):
-            P = '\x01'  # vers
-            P += '\x02'  # method
-            P += '\x01'  # addition
+            P = six.b('\x01')  # vers
+            P += six.b('\x02')  # method
+            P += six.b('\x01')  # addition
             P += long_to_bytes(self._radix, 3)
-            P += '\x0a' # always ten
-            P += long_to_bytes(self.split(n)%256, 1)
+            P += six.b('\x0a')  # always ten
+            P += long_to_bytes(self.split(n) % 256, 1)
             P += long_to_bytes(n, 4)
             P += long_to_bytes(t, 4)
             self._P[n] = P
 
         if T == 0:
-            Q = ''
+            Q = six.b('')
         else:
-            Q = str(T)
-            
-        Q += '\x00' * (((-1 * t) - b - 1) % 16)
+            Q = six.b(str(T))
+
+        Q += six.b('\x00' * (((-1 * t) - b - 1) % 16))
         Q += long_to_bytes(i, blocksize=1)
-        
+
         _B_as_bytes = long_to_bytes(B)
-        Q += '\x00' * (b - len(_B_as_bytes))
+        Q += six.b('\x00' * (b - len(_B_as_bytes)))
         Q += _B_as_bytes[-b:]
 
-        _cbc = AES.new(self._K, AES.MODE_CBC, '\x00' * 16)
+        _cbc = AES.new(self._K, AES.MODE_CBC, six.b('\x00') * 16)
 
         assert len(self._P[n]) % 16 == 0
         assert len(Q) % 16 == 0
@@ -256,7 +263,7 @@ class FFXEncrypter(object):
 
         n = len(X)
         l = self.split(n)
-        r = 10 #self.rnds(n)
+        r = 10  # self.rnds(n)
         A = X[:l]
         B = X[l:]
         for i in range(r):
@@ -265,15 +272,15 @@ class FFXEncrypter(object):
             B = C
 
         retval = FFXInteger(str(A) + str(B), radix=self._radix)
-        
+
         return retval
 
     def decrypt(self, T, Y):
         retval = ''
-        
+
         n = len(Y)
         l = self.split(n)
-        r = 10 #self.rnds(n)
+        r = 10  # self.rnds(n)
 
         A = Y[:l]
         B = Y[l:]
@@ -281,7 +288,7 @@ class FFXEncrypter(object):
             C = B
             B = A
             A = self.sub(C, self.F(n, T, i, B))
-            
+
         retval = FFXInteger(str(A) + str(B), radix=self._radix)
 
         return retval

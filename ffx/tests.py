@@ -1,10 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+from __future__ import print_function
+
 import unittest
+import six
 
 import ffx
 from ffx import FFXInteger
+from six.moves import range
 
 
 class TestFFX(unittest.TestCase):
@@ -32,19 +37,19 @@ class TestFFX(unittest.TestCase):
     def testFFXInteger4(self):
         X = FFXInteger('000')
 
-        self.assertEquals(X.to_bytes(), '\x00')
+        self.assertEquals(X.to_bytes(), six.b('\x00'))
 
     def testFFXInteger5(self):
         X = FFXInteger('11111111')
 
-        self.assertEquals(X.to_bytes(), '\xFF')
+        self.assertEquals(X.to_bytes(), six.b('\xFF'))
 
     def testFFXInteger6(self):
         X = FFXInteger('FF', radix=16)
 
-        self.assertEquals(X.to_bytes(), '\xFF')
+        self.assertEquals(X.to_bytes(), six.b('\xFF'))
 
-    def testFFXInteger3(self):
+    def testFFXInteger7(self):
         for blocksize in range(1, 129):
             X = FFXInteger('0', radix=2, blocksize=blocksize)
             self.assertEquals(len(X), blocksize)
@@ -77,8 +82,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR #1: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR #1: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testVector2(self):
         # see aes-ffx-vectors.txt
@@ -96,8 +101,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR #2: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR #2: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testVector3(self):
         # see aes-ffx-vectors.txt
@@ -115,8 +120,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR #3: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR #3: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testVector4(self):
         # see aes-ffx-vectors.txt
@@ -134,8 +139,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR #4: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR #4: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testVector5(self):
         # see aes-ffx-vectors.txt
@@ -153,12 +158,12 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR #5: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR #5: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testLongToBytes(self):
         """Due to Issue#5"""
-        self.assertEquals(ffx.long_to_bytes(65536), '\x01\x00\x00')
+        self.assertEquals(ffx.long_to_bytes(65536), six.b('\x01\x00\x00'))
 
     def testPtxtPowerOf2(self):
         """Due to Issue#5"""
@@ -172,14 +177,14 @@ class TestFFX(unittest.TestCase):
 
     def testKeyWithLeadingNullByte1(self):
         """Due to Issue#2"""
-        ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize = 128)
+        ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize=128)
         key_len = len(ffx_key.to_bytes())
-        print [ffx_key.to_bytes()]
+        print([ffx_key.to_bytes()])
         self.assertEquals(key_len, 16)
 
     def testKeyWithLeadingNullByte2(self):
         """Due to Issue#2"""
-        ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize = 128)
+        ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize=128)
         key_len = len(ffx_key.to_bytes(16))
         self.assertEquals(key_len, 16)
 
@@ -197,8 +202,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testVectorYexpansion2(self):
         radix = 16
@@ -214,8 +219,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testValueErrorDueToBlockSize(self):
         radix = 36
@@ -230,8 +235,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testOverflowErrorDueToDataSize(self):
         radix = 36
@@ -246,8 +251,8 @@ class TestFFX(unittest.TestCase):
 
         self.assertEquals(M1, M2)
 
-        print ''
-        print 'TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C)
+        print('')
+        print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
 if __name__ == '__main__':
     unittest.main()
