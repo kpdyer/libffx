@@ -18,41 +18,41 @@ class TestFFX(unittest.TestCase):
         X = FFXInteger('1')
         Y = FFXInteger('1')
 
-        self.assertEquals(X + Y, 2)
-        self.assertEquals(X + Y, FFXInteger('10'))
+        self.assertEqual(X + Y, 2)
+        self.assertEqual(X + Y, FFXInteger('10'))
 
     def testFFXInteger2(self):
         X = FFXInteger('000')
         Y = FFXInteger('111')
 
-        self.assertEquals(X + Y, 7)
-        self.assertEquals(X + Y, FFXInteger('111'))
+        self.assertEqual(X + Y, 7)
+        self.assertEqual(X + Y, FFXInteger('111'))
 
     def testFFXInteger3(self):
         X = FFXInteger('000')
         Y = FFXInteger('111')
 
-        self.assertEquals(str(X) + str(Y), '000111')
+        self.assertEqual(str(X) + str(Y), '000111')
 
     def testFFXInteger4(self):
         X = FFXInteger('000')
 
-        self.assertEquals(X.to_bytes(), six.b('\x00'))
+        self.assertEqual(X.to_bytes(), six.b('\x00'))
 
     def testFFXInteger5(self):
         X = FFXInteger('11111111')
 
-        self.assertEquals(X.to_bytes(), six.b('\xFF'))
+        self.assertEqual(X.to_bytes(), six.b('\xFF'))
 
     def testFFXInteger6(self):
         X = FFXInteger('FF', radix=16)
 
-        self.assertEquals(X.to_bytes(), six.b('\xFF'))
+        self.assertEqual(X.to_bytes(), six.b('\xFF'))
 
     def testFFXInteger7(self):
         for blocksize in range(1, 129):
             X = FFXInteger('0', radix=2, blocksize=blocksize)
-            self.assertEquals(len(X), blocksize)
+            self.assertEqual(len(X), blocksize)
 
     def testFFXEncrypt1(self):
         radix = 2
@@ -64,7 +64,7 @@ class TestFFX(unittest.TestCase):
         C = ffx_obj.encrypt(T, M1)
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
     def testVector1(self):
         # see aes-ffx-vectors.txt
@@ -77,10 +77,10 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(K.to_bytes(16), radix)
         C = ffx_obj.encrypt(T, M1)
-        self.assertEquals(C, '6124200773')
+        self.assertEqual(C, '6124200773')
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR #1: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
@@ -96,10 +96,10 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(K.to_bytes(16), radix)
         C = ffx_obj.encrypt(T, M1)
-        self.assertEquals(C, '2433477484')
+        self.assertEqual(C, '2433477484')
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR #2: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
@@ -115,10 +115,10 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(K.to_bytes(16), radix)
         C = ffx_obj.encrypt(T, M1)
-        self.assertEquals(C, '535005')
+        self.assertEqual(C, '535005')
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR #3: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
@@ -134,10 +134,10 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(K.to_bytes(16), radix)
         C = ffx_obj.encrypt(T, M1)
-        self.assertEquals(C, '658229573')
+        self.assertEqual(C, '658229573')
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR #4: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
@@ -153,17 +153,17 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(K.to_bytes(16), radix)
         C = ffx_obj.encrypt(T, M1)
-        self.assertEquals(str(C).upper(), 'C8AQ3U846ZWH6QZP')
+        self.assertEqual(str(C).upper(), 'C8AQ3U846ZWH6QZP')
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR #5: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
 
     def testLongToBytes(self):
         """Due to Issue#5"""
-        self.assertEquals(ffx.long_to_bytes(65536), six.b('\x01\x00\x00'))
+        self.assertEqual(ffx.long_to_bytes(65536), six.b('\x01\x00\x00'))
 
     def testPtxtPowerOf2(self):
         """Due to Issue#5"""
@@ -173,20 +173,20 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(key.to_bytes(16), radix=10)
         ctxt = ffx_obj.encrypt(tweak, plain)
-        self.assertEquals(ffx_obj.decrypt(tweak, ctxt), plain)
+        self.assertEqual(ffx_obj.decrypt(tweak, ctxt), plain)
 
     def testKeyWithLeadingNullByte1(self):
         """Due to Issue#2"""
         ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize=128)
         key_len = len(ffx_key.to_bytes())
         print([ffx_key.to_bytes()])
-        self.assertEquals(key_len, 16)
+        self.assertEqual(key_len, 16)
 
     def testKeyWithLeadingNullByte2(self):
         """Due to Issue#2"""
         ffx_key = ffx.FFXInteger('0'*128, radix=2, blocksize=128)
         key_len = len(ffx_key.to_bytes(16))
-        self.assertEquals(key_len, 16)
+        self.assertEqual(key_len, 16)
 
     def testVectorYexpansion1(self):
         radix = 16
@@ -197,10 +197,10 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(K.to_bytes(16), radix)
         C = ffx_obj.encrypt(T, M1)
-        self.assertEquals(C, 'ddb77d3be91a8e255fca9389a3d48da2b4476919744febea')
+        self.assertEqual(C, 'ddb77d3be91a8e255fca9389a3d48da2b4476919744febea')
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
@@ -214,10 +214,10 @@ class TestFFX(unittest.TestCase):
 
         ffx_obj = ffx.new(K.to_bytes(16), radix)
         C = ffx_obj.encrypt(T, M1)
-        self.assertEquals(C, '1f7b9459d22b2bee17d5b5616e03241467767c9dcbc424c21')
+        self.assertEqual(C, '1f7b9459d22b2bee17d5b5616e03241467767c9dcbc424c21')
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
@@ -233,7 +233,7 @@ class TestFFX(unittest.TestCase):
         C = ffx_obj.encrypt(T, M1)
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
@@ -249,7 +249,7 @@ class TestFFX(unittest.TestCase):
         C = ffx_obj.encrypt(T, M1)
         M2 = ffx_obj.decrypt(T, C)
 
-        self.assertEquals(M1, M2)
+        self.assertEqual(M1, M2)
 
         print('')
         print('TEST VECTOR: radix=' + str(radix) + ', input=' + str(M1) + ', tweak=' + str(T) + ', encrypted=' + str(C))
