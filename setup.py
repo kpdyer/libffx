@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='ffx',
-    install_requires=['gmpy', 'pycrypto', 'six'],
+    install_requires=['gmpy', 'pycryptodome', 'six'],
     test_suite='ffx.tests',
     version='0.0.2',
     description='FFX',
