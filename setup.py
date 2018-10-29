@@ -12,4 +12,13 @@ setup(
     author_email='kpdyer@gmail.com',
     url='https://github.com/kpdyer/libffx',
     packages=['ffx'],
+    classifiers=[
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 3',
+        'Development Status :: 4 - Beta',
+        'Topic :: Security :: Cryptography',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: GNU General Public License (GPL)',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+    ],
 )
