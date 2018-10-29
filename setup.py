@@ -7,7 +7,7 @@ setup(
     install_requires=['gmpy', 'pycryptodome', 'six'],
     test_suite='ffx.tests',
     version='0.0.2',
-    description='FFX',
+    description='Python implementation of FFX Mode of Operation for Format-Preserving Encryption',
     author='Kevin P. Dyer',
     author_email='kpdyer@gmail.com',
     url='https://github.com/kpdyer/libffx',
