@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+from __future__ import print_function
 import ffx
 
 
@@ -16,6 +18,6 @@ ffx_obj = ffx.new(K.to_bytes(16), radix=radix)
 C = ffx_obj.encrypt(T, X)
 Y = ffx_obj.decrypt(T, C)
 
-print X
-print C
-print Y
+print(X)
+print(C)
+print(Y)
