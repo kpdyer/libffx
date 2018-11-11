@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup(
-    name='ffx',
+    name='libffx',
     install_requires=['gmpy', 'pycryptodome', 'six'],
     test_suite='ffx.tests',
     version='0.0.2',
