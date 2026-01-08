@@ -1,91 +1,183 @@
-FFX
-===
+# FFX - Format Preserving Encryption
 
-[![Build Status](https://travis-ci.org/kpdyer/libffx.svg?branch=master)](https://travis-ci.org/kpdyer/libffx)
+[![Tests](https://github.com/kpdyer/libffx/actions/workflows/tests.yml/badge.svg)](https://github.com/kpdyer/libffx/actions/workflows/tests.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This is a python implementation of The FFX Mode of Operation for Format-Preserving Encryption [1,2].
+A Python implementation of the FFX Mode of Operation for Format-Preserving Encryption (FPE).
 
-This implementation takes into consideration the addendum in [2]. This implementation has been tested to work with message sizes in {2,...,128} and radix values of {2,...,62}. It uses maximally-balanced Feistel with a constant of 10 rounds, independent of messages size, as per [2].
+Format-preserving encryption encrypts data while preserving its format. For example, a 16-digit credit card number encrypts to another 16-digit number, and a 9-digit SSN encrypts to another 9-digit number.
 
+## Specification
 
-* [1] http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec.pdf
-* [2] http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec2.pdf
+This implementation follows the NIST FFX-A2 specification:
 
+- [FFX Spec (original)](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec.pdf)
+- [FFX Spec (addendum)](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec2.pdf)
 
-Example Usage
--------------
+### Algorithm Details
 
-```
->>> import ffx
->>>
->>> K = ffx.FFXInteger('0'*128, radix=2, blocksize=128)
->>> T = ffx.FFXInteger('0'*8,   radix=2, blocksize=8)
->>> X = ffx.FFXInteger('0'*8,   radix=2, blocksize=8)
->>>
->>> ffxObj = ffx.new(K.to_bytes(16), radix=2)
->>>
->>> Y = ffxObj.encrypt(T, X)
->>> X1 = ffxObj.decrypt(T, Y)
->>>
->>> print X
-00000000
->>> print Y
-10100010
->>> print X1
-00000000
+- **Cipher**: AES-128
+- **Mode**: Maximally-balanced Feistel network
+- **Rounds**: 10 (constant, independent of message size)
+- **Radix**: Supports 2–36 (binary through alphanumeric)
+- **Message sizes**: Tested with 2–128+ characters
+
+## Installation
+
+```bash
+pip install -e .
 ```
 
-Unit Tests / Test Vectors
--------------------------
-We have our own unit tests.
-In addition, Voltage has provided test vectors, which we've used to validate our implementation: http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
+Or install dependencies directly:
 
-```
-$ python setup.py test
-TEST VECTOR #1: radix=10, input=0123456789, tweak=9876543210, encrypted=6124200773
-TEST VECTOR #2: radix=10, input=0123456789, tweak=0, encrypted=2433477484
-TEST VECTOR #3: radix=10, input=314159, tweak=2718281828, encrypted=535005
-TEST VECTOR #4: radix=10, input=999999999, tweak=7777777, encrypted=658229573
-TEST VECTOR #5: radix=36, input=C4XPWULBM3M863JH, tweak=TQF9J5QDAGSCSPB1, encrypted=c8aq3u846zwh6qzp
-----------------------------------------------------------------------
-Ran 12 tests in 0.006s
-
-OK
+```bash
+pip install -r requirements.txt
 ```
 
+### Dependencies
 
-Benchmarks
-----------
+- `gmpy2` - Fast arbitrary precision arithmetic
+- `pycryptodome` - AES implementation
 
-```
-$ python benchmark.py --radix 2 --tweaksize 8 --messagesize 8
-RADIX=2, TWEAKSIZE=8, MESSAGESIZE=8, KEY=0x7fab9cfe5f0b2f4b61fc18fc018e1d66L
-test #1 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.4ms, tweak=00011000, plaintext=11110110, ciphertext=00000101)
-test #2 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.4ms, tweak=10101101, plaintext=01100001, ciphertext=01101001)
-test #3 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.4ms, tweak=10111100, plaintext=10011111, ciphertext=11010111)
-test #4 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.3ms, tweak=00010000, plaintext=11101011, ciphertext=11010110)
-test #5 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.4ms, tweak=01100111, plaintext=11111101, ciphertext=01010100)
-test #6 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.3ms, tweak=00010110, plaintext=01111001, ciphertext=01110101)
-test #7 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.3ms, tweak=10000010, plaintext=00001110, ciphertext=10011101)
-test #8 SUCCESS: (encrypt_cost=0.3ms, decrypt_cost=0.4ms, tweak=01001000, plaintext=11011111, ciphertext=11110110)
-test #9 SUCCESS: (encrypt_cost=0.4ms, decrypt_cost=0.3ms, tweak=00110111, plaintext=01001101, ciphertext=10010110)
-```
+## Quick Start
 
-```
-$ python benchmark.py --radix 16 --tweaksize 32 --messagesize 32
-RADIX=16, TWEAKSIZE=32, MESSAGESIZE=32, KEY=0xa8751544df84f7140eaf36ffe3484cc4L
-test #1 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=47043403a1e3d0eac42a22cd89a43afd, plaintext=245ad41b48838606173a85083717ef69, ciphertext=79aaa17eaf64fe2d7ecba00dac466898)
-test #2 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=1c2d16e0a9e6776117b9cb5d8bcb27e2, plaintext=017c5d0daabe6504e201568bb87a241e, ciphertext=513b96b8ade2d315866a16f3784d141a)
-test #3 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=9b3857a1f0cfa8cf2046b53447956af5, plaintext=df18342e3b7331d26b6c978a5dc82e27, ciphertext=a83571857193ec41d13583d935c869e9)
-test #4 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=274a3c9963a994e25f7f1c12135f0632, plaintext=46fbade6a0e4e98676d52ce03f25b50b, ciphertext=83cfcda35e960c1af2d29b4d4ebdc915)
-test #5 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=84efb2f650923859d42fa00a8c1382c0, plaintext=fc1ee6ec0ad9fc02a04a167904a25412, ciphertext=24430ca362114c7c484985c394afb68d)
-test #6 SUCCESS: (encrypt_cost=0.6ms, decrypt_cost=0.5ms, tweak=3287ca9835f976eaaddff4029aeb6eac, plaintext=a12305da848fddd2a6b563a6a6510d6a, ciphertext=281b14ff14f954c8391801db948e4ff1)
-test #7 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=4b969bd2495c36179d305b4e6cff8d3b, plaintext=015fb0ded9f8949a287dbb9f2f87f79a, ciphertext=07a45a4a7c7b0a0c78b9b5c936cf29a1)
-test #8 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.5ms, tweak=69b55befdfbdacf7bf12e2cb057b723a, plaintext=8874128c934082f202f8963c4c0ee5e4, ciphertext=0e642513e36016bc670615529b06be15)
-test #9 SUCCESS: (encrypt_cost=0.6ms, decrypt_cost=0.6ms, tweak=e9e74053084efa895f8a74e90349fc90, plaintext=0bc76a380dd83942db3dccb3ed4918dd, ciphertext=5786d6bd86642052786f89f3521ca68d)
+```python
+import ffx
+
+# Create key, tweak, and plaintext
+key = ffx.FFXInteger('0' * 128, radix=2, blocksize=128)
+tweak = ffx.FFXInteger('0' * 8, radix=2, blocksize=8)
+plaintext = ffx.FFXInteger('0' * 8, radix=2, blocksize=8)
+
+# Create encrypter (radix=2 for binary)
+ffx_obj = ffx.new(key.to_bytes(16), radix=2)
+
+# Encrypt and decrypt
+ciphertext = ffx_obj.encrypt(tweak, plaintext)
+decrypted = ffx_obj.decrypt(tweak, ciphertext)
+
+print(f"Plaintext:  {plaintext}")   # 00000000
+print(f"Ciphertext: {ciphertext}")  # 10100010
+print(f"Decrypted:  {decrypted}")   # 00000000
 ```
 
-Author
-------
+### Encrypting Credit Card Numbers (Radix 10)
 
-Kevin P. Dyer (kdyer@cs.pdx.edu)
+```python
+import ffx
+
+# 128-bit key (as hex)
+key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
+
+# Create encrypter for decimal digits
+ffx_obj = ffx.new(key.to_bytes(16), radix=10)
+
+# Encrypt a credit card number
+cc_number = ffx.FFXInteger('4111111111111111', radix=10, blocksize=16)
+tweak = ffx.FFXInteger('0000000000', radix=10, blocksize=10)
+
+encrypted = ffx_obj.encrypt(tweak, cc_number)
+print(f"Encrypted: {encrypted}")  # Another 16-digit number
+```
+
+## Running Tests
+
+The test suite validates the implementation against official Voltage Security test vectors.
+
+```bash
+pytest
+```
+
+Or with verbose output:
+
+```bash
+pytest -v
+```
+
+### Test Vectors
+
+Test vectors from the official NIST submission: [aes-ffx-vectors.txt](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt)
+
+| Vector | Radix | Input            | Tweak            | Expected Output  |
+|--------|-------|------------------|------------------|------------------|
+| 1      | 10    | 0123456789       | 9876543210       | 6124200773       |
+| 2      | 10    | 0123456789       | (none)           | 2433477484       |
+| 3      | 10    | 314159           | 2718281828       | 535005           |
+| 4      | 10    | 999999999        | 7777777          | 658229573        |
+| 5      | 36    | C4XPWULBM3M863JH | TQF9J5QDAGSCSPB1 | C8AQ3U846ZWH6QZP |
+
+## Benchmarks
+
+```bash
+python benchmark.py --radix 10 --tweaksize 10 --messagesize 16
+```
+
+Example output:
+
+```
+RADIX=10, TWEAKSIZE=10, MESSAGESIZE=16, KEY=0x7fab9cfe5f0b2f4b61fc18fc018e1d66
+test #1 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.1ms, tweak=4116892577, plaintext=2673647323700035, ciphertext=0238930243347266)
+test #2 SUCCESS: (encrypt_cost=0.1ms, decrypt_cost=0.1ms, tweak=4681498724, plaintext=6915018802668851, ciphertext=4790098135418225)
+...
+```
+
+## Project Structure
+
+```
+libffx/
+├── ffx/
+│   └── __init__.py       # FFX implementation
+├── tests/
+│   └── test_ffx.py       # Test suite
+├── pyproject.toml        # Package configuration
+├── requirements.txt      # Dependencies
+├── example.py            # Usage example
+├── benchmark.py          # Performance benchmarks
+├── aes-ffx-vectors.txt   # Official NIST test vectors
+├── LICENSE
+└── README.md
+```
+
+## API Reference
+
+### `ffx.new(key, radix)`
+
+Create a new FFX encrypter.
+
+- `key`: 16-byte AES-128 key
+- `radix`: Base for message alphabet (2-36)
+
+### `FFXInteger(value, radix=2, blocksize=None)`
+
+Represent a value in a specific radix.
+
+- `value`: Integer, string representation, or another FFXInteger
+- `radix`: Base (2-36)
+- `blocksize`: Minimum string length (zero-padded)
+
+### `FFXEncrypter.encrypt(tweak, plaintext)`
+
+Encrypt a plaintext with an optional tweak.
+
+- `tweak`: FFXInteger or 0 for no tweak
+- `plaintext`: FFXInteger to encrypt
+
+### `FFXEncrypter.decrypt(tweak, ciphertext)`
+
+Decrypt a ciphertext with the same tweak used for encryption.
+
+## Security Considerations
+
+- FFX is designed for format-preserving encryption of small domains
+- The security depends on the domain size; very small domains may be vulnerable to brute force
+- Always use cryptographically random keys
+- Tweaks can be used as public "associated data" but should be unique per encryption when possible
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file.
+
+## Author
+
+Kevin P. Dyer (kpdyer@gmail.com)
