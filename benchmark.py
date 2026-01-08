@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+from __future__ import print_function
 import time
-import math
 import random
 import string
 import argparse
 
-import ffx 
+import ffx
 from ffx import FFXInteger
+from six.moves import range
 
 
 def main():
@@ -28,12 +30,14 @@ def main():
     K = random.randint(0, 2 ** keysize - 1)
     K = FFXInteger(K, radix=2, blocksize=keysize)
 
-    banner = ['RADIX=' + str(radix),
-              'TWEAKSIZE=' + str(tweaksize),
-              'MESSAGESIZE=' + str(messagesize),
-              'KEY=' + hex(K.to_int())
-              ]
-    print ', '.join(banner)
+    print(
+        'RADIX={}, TWEAKSIZE={}, MESSAGESIZE={}, KEY={:x}'.format(
+            radix,
+            tweaksize,
+            messagesize,
+            K.to_int()
+        )
+    )
 
     ffx_obj = ffx.new(K.to_bytes(), radix)
     for i in range(1, trials):
@@ -41,7 +45,7 @@ def main():
         T = FFXInteger(T, radix=radix, blocksize=tweaksize)
 
         M1 = random.randint(0, radix ** messagesize - 1)
-        M1 = FFXInteger(M1, radix=radix, blocksize=messagesize) 
+        M1 = FFXInteger(M1, radix=radix, blocksize=messagesize)
 
         start = time.time()
         C = ffx_obj.encrypt(T, M1)
@@ -55,13 +59,16 @@ def main():
 
         assert M1 == M2
 
-        to_print = ['encrypt_cost=' + str(round(encrypt_cost, 1)) + 'ms',
-                    'decrypt_cost=' + str(round(decrypt_cost, 1)) + 'ms',
-                    'tweak=' + str(T),
-                    'plaintext=' + str(M1),
-                    'ciphertext=' + str(C),
-                    ]
-        print 'test #' + string.rjust(str(i), len(str(trials - 1)), '0') + ' SUCCESS: (' + ', '.join(to_print) + ')'
+        print(
+            'test #{} SUCCESS: (encrypt_cost={} ms, decrypt_cost={} ms, tweak={}, plaintext={}, ciphertext={})'.format(
+                i,
+                round(encrypt_cost, 1),
+                round(decrypt_cost, 1),
+                T,
+                M1,
+                C,
+            )
+        )
 
 
 if __name__ == "__main__":
