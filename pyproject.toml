@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ffx"
-version = "0.1.0"
+name = "libffx"
+version = "1.0.0"
 description = "FFX - Format Preserving Encryption (NIST FFX-A2 mode of operation)"
 readme = "README.md"
 license = {text = "MIT"}
