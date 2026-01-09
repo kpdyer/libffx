@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libffx"
-version = "1.0.0"
+version = "1.0.1"
 description = "FFX - Format Preserving Encryption (NIST FFX-A2 mode of operation)"
-readme = "README.md"
+readme = "README_PYPI.md"
 license = {text = "MIT"}
 authors = [
     {name = "Kevin P. Dyer", email = "kpdyer@gmail.com"}
