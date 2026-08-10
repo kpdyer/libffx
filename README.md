@@ -109,17 +109,27 @@ Test vectors from the official NIST submission: [aes-ffx-vectors.txt](http://csr
 
 ## Benchmarks
 
+Run the default sweep across representative radices and message sizes:
+
+```bash
+python benchmark.py
+```
+
+Or time a single configuration:
+
 ```bash
 python benchmark.py --radix 10 --tweaksize 10 --messagesize 16
 ```
 
-Example output:
+Each configuration is warmed up, then every op is timed individually and
+validated with an encrypt/decrypt round-trip. Example output:
 
 ```
-RADIX=10, TWEAKSIZE=10, MESSAGESIZE=16, KEY=0x7fab9cfe5f0b2f4b61fc18fc018e1d66
-test #1 SUCCESS: (encrypt_cost=0.5ms, decrypt_cost=0.1ms, tweak=4116892577, plaintext=2673647323700035, ciphertext=0238930243347266)
-test #2 SUCCESS: (encrypt_cost=0.1ms, decrypt_cost=0.1ms, tweak=4681498724, plaintext=6915018802668851, ciphertext=4790098135418225)
-...
+KEY=0x...  iterations=5000  warmup=200
+----------------------------------------------------------------------------
+decimal SSN              r=10 t=10  n=9   | enc   46.9us (...)   20,851/s | dec   46.9us   20,838/s
+decimal credit card      r=10 t=10  n=16  | enc   46.7us (...)   20,879/s | dec   46.7us   20,919/s
+base36, 16-char          r=36 t=16  n=16  | enc   63.6us (...)   15,332/s | dec   63.2us   15,410/s
 ```
 
 ## Project Structure
