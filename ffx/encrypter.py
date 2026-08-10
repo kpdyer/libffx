@@ -9,6 +9,7 @@ from typing import Union
 import gmpy2
 
 from Crypto.Cipher import AES
+from Crypto.Util.strxor import strxor
 
 from .exceptions import InvalidRadixException
 from .integer import FFXInteger
@@ -55,26 +56,25 @@ class FFXEncrypter:
             raise InvalidRadixException(f"Radix must be between 2 and 36, got {radix}")
 
         self._radix = gmpy2.mpz(radix)
+        self._radix_int = int(radix)
         self._chars = (string.digits + string.ascii_lowercase)[:radix]
-        
+
         self._key = key
         self._ecb = AES.new(key, AES.MODE_ECB)
-        self._P_cache: dict[tuple[int, int], bytes] = {}
-
-    @staticmethod
-    def _is_even(n: int) -> bool:
-        """Check if n is even."""
-        return (n & 1) == 0
+        # Per-(message-length, tweak-length) cache of the constant round
+        # parameters and the constant CBC-MAC prefix E(P). Keyed by (n, t)
+        # because P encodes both n and the tweak length t (in characters).
+        self._param_cache: dict[tuple[int, int], tuple] = {}
 
     def _add_mod(self, x: FFXInteger, y: int) -> FFXInteger:
         """Add x + y modulo radix^blocksize."""
         result = (x + y) % (x._radix ** x._blocksize)
-        return FFXInteger(result, radix=int(self._radix), blocksize=x._blocksize)
+        return FFXInteger(result, radix=self._radix_int, blocksize=x._blocksize)
 
     def _sub_mod(self, x: FFXInteger, y: int) -> FFXInteger:
         """Subtract x - y modulo radix^blocksize."""
         result = (x - y) % (x._radix ** x._blocksize)
-        return FFXInteger(result, radix=int(self._radix), blocksize=x._blocksize)
+        return FFXInteger(result, radix=self._radix_int, blocksize=x._blocksize)
 
     @staticmethod
     def _split(n: int) -> int:
@@ -95,39 +95,44 @@ class FFXEncrypter:
         Returns:
             Output of the round function
         """
-        if tweak == 0:
-            t = 0
-        else:
-            t = len(tweak)
+        radix = self._radix_int
+        t = 0 if tweak == 0 else len(tweak)
 
-        beta = math.ceil(n / 2.0)
-        b_bytes = int(math.ceil(math.ceil(beta * math.log(int(self._radix), 2)) / 8.0))
-        d = 4 * int(math.ceil(b_bytes / 4.0))
+        # Constant per (message length n, tweak length t): the round
+        # parameters, the block P, and its CBC-MAC prefix E(P). P is always a
+        # single 16-byte block, so with the zero IV its CBC-MAC contribution is
+        # exactly E(P); caching it removes one AES block op per round.
+        params = self._param_cache.get((n, t))
+        if params is None:
+            beta = math.ceil(n / 2.0)
+            b_bytes = int(math.ceil(math.ceil(beta * math.log(radix, 2)) / 8.0))
+            d = 4 * int(math.ceil(b_bytes / 4.0))
+            m_even = n // 2
+            m_odd = int(math.ceil(n / 2.0))
+            mod_even = radix ** m_even
+            mod_odd = radix ** m_odd
 
-        if self._is_even(i):
-            m = n // 2
-        else:
-            m = int(math.ceil(n / 2.0))
-
-        # Build P (cached per (message length, tweak length)). P encodes both
-        # n and the tweak length t (in characters), so the cache must be keyed
-        # by both; keying by n alone returns a stale P when the same encrypter
-        # is reused across tweaks of different lengths for the same message
-        # length.
-        cache_key = (n, t)
-        if cache_key not in self._P_cache:
             P = b'\x01'  # vers
             P += b'\x02'  # method
             P += b'\x01'  # addition
-            P += long_to_bytes(int(self._radix), 3)
+            P += long_to_bytes(radix, 3)
             P += b'\x0a'  # always ten rounds
             P += long_to_bytes(self._split(n) % 256, 1)
             P += long_to_bytes(n, 4)
             P += long_to_bytes(t, 4)
-            self._P_cache[cache_key] = P
-        P = self._P_cache[cache_key]
+            assert len(P) % 16 == 0
+            ep = self._ecb.encrypt(P)
 
-        # Build Q
+            params = (b_bytes, d, mod_even, mod_odd, ep)
+            self._param_cache[(n, t)] = params
+
+        b_bytes, d, mod_even, mod_odd, ep = params
+        if (i & 1) == 0:
+            mod = mod_even
+        else:
+            mod = mod_odd
+
+        # Build Q (varies every round via i and b)
         if tweak == 0:
             Q = b''
         else:
@@ -140,26 +145,27 @@ class FFXEncrypter:
         Q += b'\x00' * (b_bytes - len(b_as_bytes))
         Q += b_as_bytes[-b_bytes:] if b_bytes > 0 else b''
 
-        cbc = AES.new(self._key, AES.MODE_CBC, b'\x00' * 16)
-
-        assert len(P) % 16 == 0
         assert len(Q) % 16 == 0
 
-        Y = cbc.encrypt(P + Q)[-16:]
+        # CBC-MAC of (P + Q) with a zero IV, reusing the persistent ECB cipher
+        # instead of constructing a fresh CBC cipher object every call. Start
+        # the chain from the cached E(P), then fold in each 16-byte Q block.
+        prev = ep
+        for off in range(0, len(Q), 16):
+            prev = self._ecb.encrypt(strxor(Q[off:off + 16], prev))
+        Y = prev
 
         # Extend Y if needed
         j = 1
         TMP = Y
-        while len(TMP) < (d + 4):
-            Y_len = len(Y)
+        need = d + 4
+        while len(TMP) < need:
             X_val = bytes_to_long(Y) ^ j
-            TMP += self._ecb.encrypt(long_to_bytes(X_val, blocksize=Y_len))
+            TMP += self._ecb.encrypt(long_to_bytes(X_val, blocksize=len(Y)))
             j += 1
 
-        y = bytes_to_long(TMP[:(d + 4)])
-        z = y % (int(self._radix) ** m)
-
-        return z
+        y = bytes_to_long(TMP[:need])
+        return y % mod
 
     def encrypt(self, tweak: Union[FFXInteger, int], plaintext: FFXInteger) -> FFXInteger:
         """Encrypt a plaintext using FFX.
@@ -182,7 +188,7 @@ class FFXEncrypter:
             A = B
             B = C
 
-        return FFXInteger(str(A) + str(B), radix=int(self._radix))
+        return FFXInteger(str(A) + str(B), radix=self._radix_int)
 
     def decrypt(self, tweak: Union[FFXInteger, int], ciphertext: FFXInteger) -> FFXInteger:
         """Decrypt a ciphertext using FFX.
@@ -205,4 +211,4 @@ class FFXEncrypter:
             B = A
             A = self._sub_mod(C, self._F(n, tweak, i, B))
 
-        return FFXInteger(str(A) + str(B), radix=int(self._radix))
+        return FFXInteger(str(A) + str(B), radix=self._radix_int)
