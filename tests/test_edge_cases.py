@@ -144,6 +144,75 @@ class TestLongMessages:
         assert decrypted == plain
 
 
+class TestTweakLengthCacheKey:
+    """Reusing one encrypter across tweaks of different lengths.
+
+    The precomputed block P encodes both the message length n and the tweak
+    length t. The parameter cache must therefore be keyed by (n, t): keying by
+    n alone returns a stale P for the same n once a different tweak length has
+    been seen, corrupting every subsequent result for that length.
+
+    A freshly constructed encrypter never has a poisoned cache, so it is the
+    correct reference: a reused encrypter must produce identical output.
+    """
+
+    def _fresh(self, standard_key):
+        return ffx.new(standard_key.to_bytes(16), radix=10)
+
+    def test_long_tweak_then_short_tweak(self, standard_key):
+        """A short-tweak result must not depend on an earlier long-tweak call."""
+        msg = FFXInteger('0123456789', radix=10, blocksize=10)
+        long_tweak = FFXInteger('9876543210', radix=10, blocksize=10)   # t=10
+        short_tweak = FFXInteger('1234', radix=10, blocksize=4)         # t=4
+
+        reference = self._fresh(standard_key).encrypt(short_tweak, msg)
+
+        reused = self._fresh(standard_key)
+        reused.encrypt(long_tweak, msg)          # primes cache for n=10 with t=10
+        result = reused.encrypt(short_tweak, msg)  # must still use t=4
+
+        assert result == reference
+
+    def test_short_tweak_then_long_tweak(self, standard_key):
+        """And the reverse ordering."""
+        msg = FFXInteger('0123456789', radix=10, blocksize=10)
+        long_tweak = FFXInteger('9876543210', radix=10, blocksize=10)
+        short_tweak = FFXInteger('1234', radix=10, blocksize=4)
+
+        reference = self._fresh(standard_key).encrypt(long_tweak, msg)
+
+        reused = self._fresh(standard_key)
+        reused.encrypt(short_tweak, msg)
+        result = reused.encrypt(long_tweak, msg)
+
+        assert result == reference
+
+    def test_tweaked_then_untweaked(self, standard_key):
+        """No-tweak (t=0) after a tweaked call for the same message length."""
+        msg = FFXInteger('0123456789', radix=10, blocksize=10)
+        tweak = FFXInteger('9876543210', radix=10, blocksize=10)
+
+        reference = self._fresh(standard_key).encrypt(0, msg)
+
+        reused = self._fresh(standard_key)
+        reused.encrypt(tweak, msg)
+        result = reused.encrypt(0, msg)
+
+        assert result == reference
+
+    def test_reused_roundtrip_across_tweak_lengths(self, standard_key):
+        """Encrypt/decrypt still round-trips when tweak lengths are interleaved."""
+        obj = self._fresh(standard_key)
+        msg = FFXInteger('0123456789', radix=10, blocksize=10)
+        for tweak in [
+            FFXInteger('9876543210', radix=10, blocksize=10),
+            FFXInteger('1234', radix=10, blocksize=4),
+            0,
+            FFXInteger('55', radix=10, blocksize=2),
+        ]:
+            assert obj.decrypt(tweak, obj.encrypt(tweak, msg)) == msg
+
+
 class TestMinimumMessageSize:
     """Tests for minimum message sizes."""
 

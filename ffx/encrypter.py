@@ -59,7 +59,7 @@ class FFXEncrypter:
         
         self._key = key
         self._ecb = AES.new(key, AES.MODE_ECB)
-        self._P_cache: dict[int, bytes] = {}
+        self._P_cache: dict[tuple[int, int], bytes] = {}
 
     @staticmethod
     def _is_even(n: int) -> bool:
@@ -109,8 +109,13 @@ class FFXEncrypter:
         else:
             m = int(math.ceil(n / 2.0))
 
-        # Build P (cached per message length)
-        if n not in self._P_cache:
+        # Build P (cached per (message length, tweak length)). P encodes both
+        # n and the tweak length t (in characters), so the cache must be keyed
+        # by both; keying by n alone returns a stale P when the same encrypter
+        # is reused across tweaks of different lengths for the same message
+        # length.
+        cache_key = (n, t)
+        if cache_key not in self._P_cache:
             P = b'\x01'  # vers
             P += b'\x02'  # method
             P += b'\x01'  # addition
@@ -119,27 +124,28 @@ class FFXEncrypter:
             P += long_to_bytes(self._split(n) % 256, 1)
             P += long_to_bytes(n, 4)
             P += long_to_bytes(t, 4)
-            self._P_cache[n] = P
+            self._P_cache[cache_key] = P
+        P = self._P_cache[cache_key]
 
         # Build Q
         if tweak == 0:
             Q = b''
         else:
             Q = str(tweak).encode('latin-1')
-        
+
         Q += b'\x00' * (((-1 * t) - b_bytes - 1) % 16)
         Q += long_to_bytes(i, blocksize=1)
-        
+
         b_as_bytes = long_to_bytes(b)
         Q += b'\x00' * (b_bytes - len(b_as_bytes))
         Q += b_as_bytes[-b_bytes:] if b_bytes > 0 else b''
 
         cbc = AES.new(self._key, AES.MODE_CBC, b'\x00' * 16)
 
-        assert len(self._P_cache[n]) % 16 == 0
+        assert len(P) % 16 == 0
         assert len(Q) % 16 == 0
 
-        Y = cbc.encrypt(self._P_cache[n] + Q)[-16:]
+        Y = cbc.encrypt(P + Q)[-16:]
 
         # Extend Y if needed
         j = 1
