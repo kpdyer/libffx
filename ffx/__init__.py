@@ -44,7 +44,7 @@ __all__ = [
     'bytes_to_long',
 ]
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 
 def new(key: bytes, radix: int) -> FFXEncrypter:
