@@ -1,78 +1,70 @@
-# libffx - Format Preserving Encryption
+# libffx - FF1 Format-Preserving Encryption
 
 [![PyPI version](https://img.shields.io/pypi/v/libffx.svg)](https://pypi.org/project/libffx/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Python implementation of the FFX Mode of Operation for Format-Preserving Encryption (FPE).
+A pure-Python implementation of **NIST SP 800-38G FF1** format-preserving
+encryption (FPE), with AES-128/192/256. The only dependency is
+`pycryptodome`.
 
-Format-preserving encryption encrypts data while preserving its format. For example, a 16-digit credit card number encrypts to another 16-digit number, and a 9-digit SSN encrypts to another 9-digit number.
+Format-preserving encryption encrypts data while preserving its format: a
+16-digit credit card number encrypts to another 16-digit number.
 
 ## Quick Start
 
 ```python
-import ffx
+from ffx import FF1
 
-# 128-bit key (as hex)
-key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
+key = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")  # 16, 24, or 32 bytes
 
-# Create encrypter for decimal digits
-ffx_obj = ffx.new(key.to_bytes(16), radix=10)
+# Numeral strings (radix 2-36, or any custom alphabet)
+cipher = FF1(key, radix=10)
+ciphertext = cipher.encrypt("4111111111111111", tweak=b"account-42")
+plaintext = cipher.decrypt(ciphertext, tweak=b"account-42")
 
-# Encrypt a credit card number
-cc_number = ffx.FFXInteger('4111111111111111', radix=10, blocksize=16)
-tweak = ffx.FFXInteger('0000000000', radix=10, blocksize=10)
+# Custom alphabets
+dna = FF1(key, alphabet="ACGT")
+encrypted = dna.encrypt("ACGTACGTACGT")
 
-encrypted = ffx_obj.encrypt(tweak, cc_number)
-decrypted = ffx_obj.decrypt(tweak, encrypted)
-
-print(f"Original:  {cc_number}")   # 4111111111111111
-print(f"Encrypted: {encrypted}")   # 3847592710482695
-print(f"Decrypted: {decrypted}")   # 4111111111111111
+# Integers in an arbitrary domain [0, N)
+y = cipher.encrypt_int(123456789, domain=10**9)
+x = cipher.decrypt_int(y, domain=10**9)
 ```
 
-## API Reference
+## API
 
-### `ffx.new(key, radix)`
+- `FF1(key, *, radix=None, alphabet=None, allow_small_domain=False)`:
+  key must be 16/24/32 bytes; pass `radix` (2-36) or an explicit `alphabet`
+  (2-65536 unique Unicode characters), or neither for integer-only use.
+- `encrypt(s, *, tweak=b"")` / `decrypt(s, *, tweak=b"")`: same-length
+  numeral strings over the same alphabet; tweaks are arbitrary bytes.
+- `encrypt_int(x, *, domain, tweak=b"")` / `decrypt_int(y, *, domain, tweak=b"")`
+ : permute integers in `[0, domain)`; independent of the instance alphabet.
 
-Create a new FFX encrypter.
+## Security notes
 
-- `key`: 16-byte AES-128 key
-- `radix`: Base for message alphabet (2-36)
+- FF1 is **deterministic**: equal plaintexts under the same key and tweak
+  give equal ciphertexts. Use tweaks as public associated data to separate
+  records.
+- Message domains must satisfy `radix**n >= 1_000_000` (Draft SP 800-38G
+  Rev 1). `allow_small_domain=True` relaxes the floor to 100 (original
+  SP 800-38G); small domains are fundamentally weaker.
+- Always use cryptographically random keys.
 
-### `FFXInteger(value, radix=2, blocksize=None)`
+## Migrating from v1
 
-Represent a value in a specific radix.
-
-- `value`: Integer, string representation, or another FFXInteger
-- `radix`: Base (2-36)
-- `blocksize`: Minimum output length (zero-padded)
-
-### `FFXEncrypter.encrypt(tweak, plaintext)` / `.decrypt(tweak, ciphertext)`
-
-Encrypt/decrypt with an optional tweak (public associated data).
-
-## Specification
-
-This implementation follows the [NIST FFX-A2 specification](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec2.pdf):
-
-- **Cipher**: AES-128
-- **Mode**: Maximally-balanced Feistel network
-- **Rounds**: 10 (constant)
-- **Radix**: 2–36 (binary through alphanumeric)
-
-## Security Considerations
-
-- FFX is designed for format-preserving encryption of small domains
-- Security depends on domain size; very small domains may be vulnerable to brute force
-- Always use cryptographically random keys
-- Tweaks should be unique per encryption when possible
+v1 implemented the FFX[radix] addendum profile, which is FF1 with a numeral
+string tweak. FF1 with the old tweak string encoded as ASCII bytes
+reproduces v1 FFX[radix] ciphertexts exactly (v1 rendered radix-36 strings
+in lowercase). The v1 wrapper classes, factory function, and big-integer
+dependency are gone.
 
 ## Links
 
 - [GitHub Repository](https://github.com/kpdyer/libffx)
 - [Issue Tracker](https://github.com/kpdyer/libffx/issues)
-- [NIST FFX Specification](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec2.pdf)
+- [NIST SP 800-38G](https://csrc.nist.gov/publications/detail/sp/800-38g/final)
 
 ## License
 

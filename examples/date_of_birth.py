@@ -3,63 +3,39 @@
 
 Encrypts dates while preserving:
 - The format (YYYY-MM-DD, MM/DD/YYYY, etc.)
-- Valid-looking date structure
-- Numeric content
+- Numeric content and digit count
 
-Note: Encrypted dates may not be calendar-valid dates, but will
-have the same format and numeric structure.
+All digits are encrypted as one block (FF1's domain minimum rules out
+encrypting 2-digit month/day fields on their own), then re-inserted into
+the original format. Encrypted dates are generally not calendar-valid,
+but keep the same shape.
 """
 
-import re
+from ffx import FF1
 
-import ffx
-
-
-def encrypt_date(date: str, ffx_obj) -> str:
-    """Encrypt a date, preserving format.
-    
-    Args:
-        date: Date string in any format (YYYY-MM-DD, MM/DD/YYYY, etc.)
-        ffx_obj: FFX encrypter configured with radix=10
-    
-    Returns:
-        Encrypted date with same format
-    """
-    # Split into digit groups and separators
-    parts = re.split(r'(\d+)', date)
-    
-    result = []
-    for part in parts:
-        if part.isdigit():
-            plain = ffx.FFXInteger(part, radix=10, blocksize=len(part))
-            encrypted = ffx_obj.encrypt(0, plain)
-            result.append(str(encrypted).zfill(len(part)))
-        else:
-            result.append(part)
-    
-    return ''.join(result)
+KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
 
 
-def decrypt_date(encrypted_date: str, ffx_obj) -> str:
+def _transform(date: str, cipher: FF1, *, encrypt: bool) -> str:
+    digits = "".join(c for c in date if c.isdigit())
+    op = cipher.encrypt if encrypt else cipher.decrypt
+    new_digits = iter(op(digits, tweak=b"date"))
+    return "".join(next(new_digits) if c.isdigit() else c for c in date)
+
+
+def encrypt_date(date: str, cipher: FF1) -> str:
+    """Encrypt a date, preserving format. `cipher` must use radix=10."""
+    return _transform(date, cipher, encrypt=True)
+
+
+def decrypt_date(encrypted_date: str, cipher: FF1) -> str:
     """Decrypt a date."""
-    parts = re.split(r'(\d+)', encrypted_date)
-    
-    result = []
-    for part in parts:
-        if part.isdigit():
-            cipher = ffx.FFXInteger(part, radix=10, blocksize=len(part))
-            decrypted = ffx_obj.decrypt(0, cipher)
-            result.append(str(decrypted).zfill(len(part)))
-        else:
-            result.append(part)
-    
-    return ''.join(result)
+    return _transform(encrypted_date, cipher, encrypt=False)
 
 
 def main():
-    key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
-    ffx_obj = ffx.new(key.to_bytes(16), radix=10)
-    
+    cipher = FF1(KEY, radix=10)
+
     dates = [
         "1990-05-15",      # ISO format
         "05/15/1990",      # US format
@@ -67,18 +43,18 @@ def main():
         "2000-01-01",      # Y2K
         "12/31/1999",      # Pre-Y2K
     ]
-    
+
     print("Date Format-Preserving Encryption")
     print("=" * 50)
-    
+
     for date in dates:
-        encrypted = encrypt_date(date, ffx_obj)
-        decrypted = decrypt_date(encrypted, ffx_obj)
-        
+        encrypted = encrypt_date(date, cipher)
+        decrypted = decrypt_date(encrypted, cipher)
+
         print(f"\nOriginal:  {date}")
         print(f"Encrypted: {encrypted}")
         print(f"Decrypted: {decrypted}")
-        print(f"Verified:  {'✓' if date == decrypted else '✗'}")
+        print(f"Verified:  {'ok' if date == decrypted else 'MISMATCH'}")
 
 
 if __name__ == "__main__":

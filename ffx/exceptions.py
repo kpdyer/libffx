@@ -1,16 +1,19 @@
-"""Custom exceptions for the FFX library."""
+"""Exception hierarchy for the ffx package."""
 
 
-class FFXException(Exception):
-    """Base exception for FFX errors."""
-    pass
+class FFXError(Exception):
+    """Base class for all errors raised by the ffx package."""
 
 
-class UnknownTypeException(FFXException):
-    """Raised when an unsupported type is passed to FFXInteger."""
-    pass
+class KeyLengthError(FFXError, ValueError):
+    """Raised when the AES key is not exactly 16, 24, or 32 bytes."""
 
 
-class InvalidRadixException(FFXException):
-    """Raised when an invalid radix is specified (must be 2-36)."""
-    pass
+class AlphabetError(FFXError, ValueError):
+    """Raised for an invalid radix/alphabet configuration, or when a
+    message contains characters outside the instance's alphabet."""
+
+
+class DomainError(FFXError, ValueError):
+    """Raised when a message or integer falls outside the permitted domain
+    (too short, domain below the minimum, or value out of range)."""

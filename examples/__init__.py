@@ -1,1 +1,1 @@
-# Example scripts for FFX usage
+# Example scripts for FF1 usage

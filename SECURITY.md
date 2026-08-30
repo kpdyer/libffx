@@ -3,13 +3,13 @@
 ## Supported Versions
 
 `libffx` is distributed on [PyPI](https://pypi.org/project/libffx/). Security
-fixes are released against the latest published version — please make sure you
+fixes are released against the latest published version; please make sure you
 are on the most recent release before reporting an issue.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| 2.x     | :white_check_mark: |
+| < 2.0   | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -27,10 +27,10 @@ confirmed, a fix and a coordinated disclosure timeline will be arranged.
 
 ## Scope
 
-`libffx` implements format-preserving encryption (NIST FFX-A2). Reports that are
-especially relevant include:
+`libffx` implements format-preserving encryption (NIST SP 800-38G FF1).
+Reports that are especially relevant include:
 
-- Cryptographic correctness or weaknesses in the FFX implementation
+- Cryptographic correctness or weaknesses in the FF1 implementation
 - Timing side channels in encryption / decryption
 - Memory-safety or input-validation issues reachable from the public API
 
