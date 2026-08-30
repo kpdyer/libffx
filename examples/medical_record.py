@@ -2,130 +2,78 @@
 """Example: Format-preserving encryption of medical record numbers (MRN).
 
 Encrypts MRNs while preserving:
-- Alphanumeric format
-- Length and structure
-- Prefix codes (optionally preserved)
+- Alphanumeric format and length
+- Separator positions
+- An optional letter prefix such as a facility code (e.g. "MRN-", "AB-"),
+  kept in the clear when it is set off by a separator
+
+The rest is encrypted as one radix-36 block, with the preserved prefix
+bound into the tweak so the same digits encrypt differently under
+different prefixes. The prefix split keys off the separator, which
+survives encryption in place, so it is unambiguous in both directions.
 """
 
-import re
+from ffx import FF1
 
-import ffx
-
-
-def encrypt_mrn(mrn: str, ffx_obj_alpha, ffx_obj_num, preserve_prefix: bool = False) -> str:
-    """Encrypt a Medical Record Number.
-    
-    Args:
-        mrn: Medical record number (alphanumeric)
-        ffx_obj_alpha: FFX encrypter for letters (radix=36)
-        ffx_obj_num: FFX encrypter for digits (radix=10)
-        preserve_prefix: If True, keeps first 2-3 letter prefix unchanged
-    
-    Returns:
-        Encrypted MRN with same format
-    """
-    # Find prefix (letters at start)
-    match = re.match(r'^([A-Za-z]+)', mrn)
-    prefix = match.group(1) if match else ""
-    
-    if preserve_prefix and len(prefix) >= 2:
-        rest = mrn[len(prefix):]
-        prefix_out = prefix.upper()
-    else:
-        rest = mrn
-        prefix_out = ""
-        if prefix:
-            plain = ffx.FFXInteger(prefix.lower(), radix=36, blocksize=len(prefix))
-            encrypted = ffx_obj_alpha.encrypt(0, plain)
-            prefix_out = str(encrypted).upper()
-            rest = mrn[len(prefix):]
-    
-    # Encrypt remaining digits
-    digits = ''.join(c for c in rest if c.isdigit())
-    if digits:
-        plain = ffx.FFXInteger(digits, radix=10, blocksize=len(digits))
-        encrypted = ffx_obj_num.encrypt(0, plain)
-        encrypted_digits = str(encrypted).zfill(len(digits))
-    else:
-        encrypted_digits = ""
-    
-    return prefix_out + encrypted_digits
+KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
 
 
-def decrypt_mrn(encrypted_mrn: str, ffx_obj_alpha, ffx_obj_num, preserve_prefix: bool = False) -> str:
-    """Decrypt a Medical Record Number."""
-    match = re.match(r'^([A-Za-z]+)', encrypted_mrn)
-    prefix = match.group(1) if match else ""
-    
-    if preserve_prefix and len(prefix) >= 2:
-        rest = encrypted_mrn[len(prefix):]
-        prefix_out = prefix.upper()
-    else:
-        rest = encrypted_mrn
-        prefix_out = ""
-        if prefix:
-            cipher = ffx.FFXInteger(prefix.lower(), radix=36, blocksize=len(prefix))
-            decrypted = ffx_obj_alpha.decrypt(0, cipher)
-            prefix_out = str(decrypted).upper()
-            rest = encrypted_mrn[len(prefix):]
-    
-    digits = ''.join(c for c in rest if c.isdigit())
-    if digits:
-        cipher = ffx.FFXInteger(digits, radix=10, blocksize=len(digits))
-        decrypted = ffx_obj_num.decrypt(0, cipher)
-        decrypted_digits = str(decrypted).zfill(len(digits))
-    else:
-        decrypted_digits = ""
-    
-    return prefix_out + decrypted_digits
+def _split_prefix(mrn: str, preserve_prefix: bool) -> tuple[str, str]:
+    """Split "abc-123..." into ("abc-", "123..."), else ("", mrn)."""
+    if preserve_prefix:
+        i = 0
+        while i < len(mrn) and mrn[i].isalpha():
+            i += 1
+        # A prefix only counts if a separator follows it; the separator is
+        # preserved by encryption, so decryption splits identically.
+        if 1 <= i <= 4 and i < len(mrn) and not mrn[i].isalnum():
+            return mrn[: i + 1], mrn[i + 1:]
+    return "", mrn
 
 
-def encrypt_mrn_full(mrn: str, ffx_obj) -> str:
-    """Encrypt entire MRN as alphanumeric string."""
-    clean = mrn.upper()
-    # Only encrypt alphanumeric
-    if not clean.isalnum():
-        raise ValueError("MRN must be alphanumeric")
-    
-    plain = ffx.FFXInteger(clean.lower(), radix=36, blocksize=len(clean))
-    encrypted = ffx_obj.encrypt(0, plain)
-    return str(encrypted).upper().zfill(len(clean))
+def _transform(body: str, prefix: str, cipher: FF1, *, encrypt: bool) -> str:
+    chars = "".join(c for c in body if c.isalnum())
+    op = cipher.encrypt if encrypt else cipher.decrypt
+    tweak = b"mrn:" + prefix.encode("ascii")
+    new_chars = iter(op(chars, tweak=tweak))
+    return "".join(next(new_chars) if c.isalnum() else c for c in body)
 
 
-def decrypt_mrn_full(encrypted_mrn: str, ffx_obj) -> str:
-    """Decrypt entire MRN."""
-    cipher = ffx.FFXInteger(encrypted_mrn.lower(), radix=36, blocksize=len(encrypted_mrn))
-    decrypted = ffx_obj.decrypt(0, cipher)
-    return str(decrypted).upper().zfill(len(encrypted_mrn))
+def encrypt_mrn(mrn: str, cipher: FF1, preserve_prefix: bool = False) -> str:
+    """Encrypt an MRN (lowercased). `cipher` must use radix=36."""
+    prefix, body = _split_prefix(mrn.lower(), preserve_prefix)
+    return prefix + _transform(body, prefix, cipher, encrypt=True)
+
+
+def decrypt_mrn(encrypted_mrn: str, cipher: FF1, preserve_prefix: bool = False) -> str:
+    """Decrypt an MRN."""
+    prefix, body = _split_prefix(encrypted_mrn, preserve_prefix)
+    return prefix + _transform(body, prefix, cipher, encrypt=False)
 
 
 def main():
-    key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
-    ffx_num = ffx.new(key.to_bytes(16), radix=10)
-    ffx_alpha = ffx.new(key.to_bytes(16), radix=36)
-    
-    print("Medical Record Number Format-Preserving Encryption")
-    print("=" * 60)
-    
+    cipher = FF1(KEY, radix=36, allow_small_domain=True)
+
     mrns = [
-        "MRN12345678",
-        "PAT00987654",
-        "A1234567",
-        "HOS123456789",
-        "12345678",  # Numeric only
+        "MRN-12345678",
+        "AB-9876543",
+        "XYZ1234567",  # no separator: prefix cannot be preserved
+        "000111222",
     ]
-    
-    print("\n--- Full alphanumeric encryption ---")
+
+    print("Medical Record Number Format-Preserving Encryption")
+    print("=" * 50)
+
     for mrn in mrns:
-        encrypted = encrypt_mrn_full(mrn, ffx_alpha)
-        decrypted = decrypt_mrn_full(encrypted, ffx_alpha)
-        print(f"Original: {mrn:15} → Encrypted: {encrypted:15} → Verified: {'✓' if mrn.upper() == decrypted else '✗'}")
-    
-    print("\n--- Prefix-preserving encryption ---")
-    for mrn in mrns:
-        encrypted = encrypt_mrn(mrn, ffx_alpha, ffx_num, preserve_prefix=True)
-        decrypted = decrypt_mrn(encrypted, ffx_alpha, ffx_num, preserve_prefix=True)
-        print(f"Original: {mrn:15} → Encrypted: {encrypted:15} → Verified: {'✓' if mrn.upper() == decrypted else '✗'}")
+        for preserve in (False, True):
+            encrypted = encrypt_mrn(mrn, cipher, preserve_prefix=preserve)
+            decrypted = decrypt_mrn(encrypted, cipher, preserve_prefix=preserve)
+            label = "prefix kept" if preserve else "all encrypted"
+
+            print(f"\nOriginal:  {mrn}  ({label})")
+            print(f"Encrypted: {encrypted}")
+            print(f"Decrypted: {decrypted}")
+            print(f"Verified:  {'ok' if mrn.lower() == decrypted else 'MISMATCH'}")
 
 
 if __name__ == "__main__":

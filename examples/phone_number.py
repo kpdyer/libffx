@@ -2,76 +2,47 @@
 """Example: Format-preserving encryption of phone numbers.
 
 Encrypts phone numbers while preserving:
-- The format (parentheses, dashes, spaces)
-- Numeric length
-- Country code (optionally preserved or encrypted)
+- The format (parentheses, dashes, dots, spaces)
+- Digit count
+- The country code (optionally preserved)
+
+The national number is encrypted as one block (FF1's domain minimum rules
+out encrypting tiny groups like an area code on its own), then the digits
+are re-inserted into the original formatting.
 """
 
-import re
+from ffx import FF1
 
-import ffx
-
-
-def encrypt_phone(phone: str, ffx_obj, preserve_country_code: bool = True) -> str:
-    """Encrypt a phone number, preserving format.
-    
-    Args:
-        phone: Phone number in any format
-        ffx_obj: FFX encrypter configured with radix=10
-        preserve_country_code: If True, keeps +1, +44, etc unchanged
-    
-    Returns:
-        Encrypted phone number with same format
-    """
-    # Find all digit sequences and their positions
-    parts = re.split(r'(\d+)', phone)
-    
-    result = []
-    first_digits = True
-    
-    for part in parts:
-        if part.isdigit():
-            if first_digits and preserve_country_code and len(part) <= 2:
-                # Preserve short country codes
-                result.append(part)
-            else:
-                # Encrypt digit sequences
-                plain = ffx.FFXInteger(part, radix=10, blocksize=len(part))
-                encrypted = ffx_obj.encrypt(0, plain)
-                result.append(str(encrypted).zfill(len(part)))
-            first_digits = False
-        else:
-            result.append(part)
-    
-    return ''.join(result)
+KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
 
 
-def decrypt_phone(encrypted_phone: str, ffx_obj, preserve_country_code: bool = True) -> str:
+def _transform(phone: str, cipher: FF1, *, preserve_country_code: bool, encrypt: bool) -> str:
+    digits = [c for c in phone if c.isdigit()]
+
+    # Preserve a short leading country code like +1 or +44.
+    keep = 0
+    if preserve_country_code and phone.lstrip().startswith("+"):
+        keep = 1 if len(digits) <= 11 else 2
+
+    head, body = "".join(digits[:keep]), "".join(digits[keep:])
+    op = cipher.encrypt if encrypt else cipher.decrypt
+    new_digits = iter(head + op(body, tweak=b"phone"))
+    return "".join(next(new_digits) if c.isdigit() else c for c in phone)
+
+
+def encrypt_phone(phone: str, cipher: FF1, preserve_country_code: bool = True) -> str:
+    """Encrypt a phone number. `cipher` must use radix=10."""
+    return _transform(phone, cipher, preserve_country_code=preserve_country_code, encrypt=True)
+
+
+def decrypt_phone(encrypted_phone: str, cipher: FF1, preserve_country_code: bool = True) -> str:
     """Decrypt a phone number."""
-    parts = re.split(r'(\d+)', encrypted_phone)
-    
-    result = []
-    first_digits = True
-    
-    for part in parts:
-        if part.isdigit():
-            if first_digits and preserve_country_code and len(part) <= 2:
-                result.append(part)
-            else:
-                cipher = ffx.FFXInteger(part, radix=10, blocksize=len(part))
-                decrypted = ffx_obj.decrypt(0, cipher)
-                result.append(str(decrypted).zfill(len(part)))
-            first_digits = False
-        else:
-            result.append(part)
-    
-    return ''.join(result)
+    return _transform(encrypted_phone, cipher, preserve_country_code=preserve_country_code, encrypt=False)
 
 
 def main():
-    key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
-    ffx_obj = ffx.new(key.to_bytes(16), radix=10)
-    
+    cipher = FF1(KEY, radix=10)
+
     phones = [
         "(555) 123-4567",
         "+1 (800) 555-0199",
@@ -79,18 +50,18 @@ def main():
         "555.867.5309",
         "+1-888-555-1234",
     ]
-    
+
     print("Phone Number Format-Preserving Encryption")
     print("=" * 50)
-    
+
     for phone in phones:
-        encrypted = encrypt_phone(phone, ffx_obj)
-        decrypted = decrypt_phone(encrypted, ffx_obj)
-        
+        encrypted = encrypt_phone(phone, cipher)
+        decrypted = decrypt_phone(encrypted, cipher)
+
         print(f"\nOriginal:  {phone}")
         print(f"Encrypted: {encrypted}")
         print(f"Decrypted: {decrypted}")
-        print(f"Verified:  {'✓' if phone == decrypted else '✗'}")
+        print(f"Verified:  {'ok' if phone == decrypted else 'MISMATCH'}")
 
 
 if __name__ == "__main__":

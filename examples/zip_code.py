@@ -2,111 +2,64 @@
 """Example: Format-preserving encryption of ZIP/postal codes.
 
 Encrypts postal codes while preserving:
-- US 5-digit ZIP codes
+- US 5-digit ZIP codes (needs the small-domain opt-in: 10**5 < 10**6)
 - US ZIP+4 codes (XXXXX-XXXX)
-- Canadian postal codes (A1A 1A1)
-- UK postcodes (alphanumeric)
+- Alphanumeric codes (Canadian A1A 1A1, UK postcodes) via radix 36
+
+Separators (spaces, dashes) stay in place; alphanumeric characters are
+encrypted as one block per code.
 """
 
-import re
+from ffx import FF1
 
-import ffx
-
-
-def encrypt_us_zip(zip_code: str, ffx_obj) -> str:
-    """Encrypt a US ZIP code (5-digit or ZIP+4)."""
-    digits = ''.join(c for c in zip_code if c.isdigit())
-    
-    if len(digits) == 5:
-        plain = ffx.FFXInteger(digits, radix=10, blocksize=5)
-        encrypted = ffx_obj.encrypt(0, plain)
-        return str(encrypted).zfill(5)
-    elif len(digits) == 9:
-        plain = ffx.FFXInteger(digits, radix=10, blocksize=9)
-        encrypted = ffx_obj.encrypt(0, plain)
-        result = str(encrypted).zfill(9)
-        return f"{result[0:5]}-{result[5:9]}"
-    else:
-        raise ValueError(f"US ZIP must be 5 or 9 digits, got {len(digits)}")
+KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
 
 
-def decrypt_us_zip(encrypted_zip: str, ffx_obj) -> str:
-    """Decrypt a US ZIP code."""
-    digits = ''.join(c for c in encrypted_zip if c.isdigit())
-    
-    if len(digits) == 5:
-        cipher = ffx.FFXInteger(digits, radix=10, blocksize=5)
-        decrypted = ffx_obj.decrypt(0, cipher)
-        return str(decrypted).zfill(5)
-    elif len(digits) == 9:
-        cipher = ffx.FFXInteger(digits, radix=10, blocksize=9)
-        decrypted = ffx_obj.decrypt(0, cipher)
-        result = str(decrypted).zfill(9)
-        return f"{result[0:5]}-{result[5:9]}"
-    else:
-        raise ValueError(f"Invalid ZIP format")
+def _transform(code: str, cipher: FF1, *, encrypt: bool) -> str:
+    chars = "".join(c for c in code if c.isalnum())
+    op = cipher.encrypt if encrypt else cipher.decrypt
+    new_chars = iter(op(chars, tweak=b"postal"))
+    return "".join(next(new_chars) if c.isalnum() else c for c in code)
 
 
-def encrypt_canadian_postal(postal: str, ffx_obj_alpha, ffx_obj_num) -> str:
-    """Encrypt a Canadian postal code (A1A 1A1 format)."""
-    clean = postal.upper().replace(' ', '')
-    if len(clean) != 6:
-        raise ValueError("Canadian postal code must be 6 characters")
-    
-    # Encrypt letters (positions 0, 2, 4) and digits (positions 1, 3, 5) separately
-    letters = clean[0] + clean[2] + clean[4]
-    digits = clean[1] + clean[3] + clean[5]
-    
-    plain_letters = ffx.FFXInteger(letters.lower(), radix=36, blocksize=3)
-    plain_digits = ffx.FFXInteger(digits, radix=10, blocksize=3)
-    
-    enc_letters = str(ffx_obj_alpha.encrypt(0, plain_letters)).upper()
-    enc_digits = str(ffx_obj_num.encrypt(0, plain_digits)).zfill(3)
-    
-    return f"{enc_letters[0]}{enc_digits[0]}{enc_letters[1]} {enc_digits[1]}{enc_letters[2]}{enc_digits[2]}"
+def encrypt_postal_code(code: str, digit_cipher: FF1, alnum_cipher: FF1) -> str:
+    """Encrypt a postal code, choosing the numeric or alphanumeric cipher."""
+    chars = "".join(c for c in code if c.isalnum())
+    cipher = digit_cipher if chars.isdigit() else alnum_cipher
+    return _transform(code.lower(), cipher, encrypt=True)
 
 
-def decrypt_canadian_postal(encrypted: str, ffx_obj_alpha, ffx_obj_num) -> str:
-    """Decrypt a Canadian postal code."""
-    clean = encrypted.upper().replace(' ', '')
-    
-    letters = clean[0] + clean[2] + clean[4]
-    digits = clean[1] + clean[3] + clean[5]
-    
-    cipher_letters = ffx.FFXInteger(letters.lower(), radix=36, blocksize=3)
-    cipher_digits = ffx.FFXInteger(digits, radix=10, blocksize=3)
-    
-    dec_letters = str(ffx_obj_alpha.decrypt(0, cipher_letters)).upper()
-    dec_digits = str(ffx_obj_num.decrypt(0, cipher_digits)).zfill(3)
-    
-    return f"{dec_letters[0]}{dec_digits[0]}{dec_letters[1]} {dec_digits[1]}{dec_letters[2]}{dec_digits[2]}"
+def decrypt_postal_code(code: str, digit_cipher: FF1, alnum_cipher: FF1) -> str:
+    """Decrypt a postal code."""
+    chars = "".join(c for c in code if c.isalnum())
+    cipher = digit_cipher if chars.isdigit() else alnum_cipher
+    return _transform(code, cipher, encrypt=False)
 
 
 def main():
-    key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
-    ffx_num = ffx.new(key.to_bytes(16), radix=10)
-    ffx_alpha = ffx.new(key.to_bytes(16), radix=36)
-    
-    print("ZIP/Postal Code Format-Preserving Encryption")
+    # 5-digit ZIPs have a domain of 10**5, below the default minimum of
+    # 10**6, so opt into the original SP 800-38G floor.
+    digit_cipher = FF1(KEY, radix=10, allow_small_domain=True)
+    alnum_cipher = FF1(KEY, radix=36, allow_small_domain=True)
+
+    codes = [
+        "90210",        # US 5-digit ZIP
+        "10001-4356",   # US ZIP+4
+        "K1A 0B1",      # Canadian postal code
+        "SW1A 1AA",     # UK postcode
+    ]
+
+    print("Postal Code Format-Preserving Encryption")
     print("=" * 50)
-    
-    # US ZIP codes
-    us_zips = ["90210", "10001", "12345-6789", "00501-0001"]
-    print("\n--- US ZIP Codes ---")
-    for zip_code in us_zips:
-        encrypted = encrypt_us_zip(zip_code, ffx_num)
-        decrypted = decrypt_us_zip(encrypted, ffx_num)
-        original = ''.join(c for c in zip_code if c.isdigit())
-        dec_digits = ''.join(c for c in decrypted if c.isdigit())
-        print(f"Original: {zip_code:15} → Encrypted: {encrypted:15} → Verified: {'✓' if original == dec_digits else '✗'}")
-    
-    # Canadian postal codes
-    canadian = ["K1A 0B1", "V6B 4Y8", "M5V 3L9"]
-    print("\n--- Canadian Postal Codes ---")
-    for postal in canadian:
-        encrypted = encrypt_canadian_postal(postal, ffx_alpha, ffx_num)
-        decrypted = decrypt_canadian_postal(encrypted, ffx_alpha, ffx_num)
-        print(f"Original: {postal:15} → Encrypted: {encrypted:15} → Verified: {'✓' if postal == decrypted else '✗'}")
+
+    for code in codes:
+        encrypted = encrypt_postal_code(code, digit_cipher, alnum_cipher)
+        decrypted = decrypt_postal_code(encrypted, digit_cipher, alnum_cipher)
+
+        print(f"\nOriginal:  {code}")
+        print(f"Encrypted: {encrypted}")
+        print(f"Decrypted: {decrypted}")
+        print(f"Verified:  {'ok' if code.lower() == decrypted else 'MISMATCH'}")
 
 
 if __name__ == "__main__":

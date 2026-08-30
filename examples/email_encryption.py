@@ -1,113 +1,67 @@
 #!/usr/bin/env python3
 """Example: Format-preserving encryption of email addresses.
 
-This example demonstrates how to encrypt email addresses while preserving
-their format. The encrypted output remains a valid-looking email address.
+Encrypts email addresses while preserving their shape: the local part and
+the domain labels (except the top-level domain) are each encrypted as one
+radix-36 block, so the output still looks like an email address.
 
-FFX uses a radix-based alphabet (2-36), so we encrypt alphanumeric parts
-separately while preserving special characters like @ and dots.
+Structure characters (@, dots, hyphens, plus signs) stay in place.
 """
 
-import re
+from ffx import FF1
 
-import ffx
-
-
-def encrypt_email(email: str, ffx_obj) -> str:
-    """Encrypt an email address while preserving its format.
-    
-    Encrypts alphanumeric parts using radix-36 FFX, preserves structure
-    characters (@, dots, hyphens, etc).
-    
-    Args:
-        email: Email address to encrypt (will be lowercased)
-        ffx_obj: FFX encrypter configured with radix=36
-    
-    Returns:
-        Encrypted email address with same structure
-    
-    Example:
-        >>> key = ffx.FFXInteger('0' * 32, radix=16, blocksize=32)
-        >>> ffx_obj = ffx.new(key.to_bytes(16), radix=36)
-        >>> encrypt_email("john.doe@example.com", ffx_obj)
-        'j9ky.5rf@q2z0h5i.nfd'
-    """
-    local, domain = email.lower().split('@')
-    
-    def encrypt_part(part: str) -> str:
-        # Split on non-alphanumeric, keeping separators
-        segments = re.split(r'([^a-z0-9]+)', part)
-        result = []
-        for seg in segments:
-            if seg and re.match(r'^[a-z0-9]+$', seg):
-                # Encrypt alphanumeric segments
-                plain = ffx.FFXInteger(seg, radix=36, blocksize=len(seg))
-                encrypted = ffx_obj.encrypt(0, plain)
-                result.append(str(encrypted))
-            else:
-                # Keep separators (dots, hyphens, etc) as-is
-                result.append(seg)
-        return ''.join(result)
-    
-    encrypted_local = encrypt_part(local)
-    encrypted_domain = encrypt_part(domain)
-    
-    return f"{encrypted_local}@{encrypted_domain}"
+KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
 
 
-def decrypt_email(encrypted_email: str, ffx_obj) -> str:
-    """Decrypt an email address.
-    
-    Args:
-        encrypted_email: Previously encrypted email address
-        ffx_obj: FFX encrypter configured with radix=36 (same key as encryption)
-    
-    Returns:
-        Original email address
-    """
-    local, domain = encrypted_email.split('@')
-    
-    def decrypt_part(part: str) -> str:
-        segments = re.split(r'([^a-z0-9]+)', part)
-        result = []
-        for seg in segments:
-            if seg and re.match(r'^[a-z0-9]+$', seg):
-                cipher = ffx.FFXInteger(seg, radix=36, blocksize=len(seg))
-                decrypted = ffx_obj.decrypt(0, cipher)
-                result.append(str(decrypted))
-            else:
-                result.append(seg)
-        return ''.join(result)
-    
-    return f"{decrypt_part(local)}@{decrypt_part(domain)}"
+def _transform(part: str, cipher: FF1, *, encrypt: bool) -> str:
+    """Encrypt/decrypt the alphanumeric characters of `part` in place."""
+    chars = "".join(c for c in part if c.isalnum())
+    if len(chars) < 2:
+        return part  # too short to encrypt; leave as-is
+    op = cipher.encrypt if encrypt else cipher.decrypt
+    new_chars = iter(op(chars, tweak=b"email"))
+    return "".join(next(new_chars) if c.isalnum() else c for c in part)
+
+
+def _split(email: str) -> tuple[str, str, str]:
+    local, _, domain = email.partition("@")
+    body, dot, tld = domain.rpartition(".")
+    return local, body, dot + tld
+
+
+def encrypt_email(email: str, cipher: FF1) -> str:
+    """Encrypt an email address (lowercased). `cipher` must use radix=36."""
+    local, body, tld = _split(email.lower())
+    return _transform(local, cipher, encrypt=True) + "@" + _transform(body, cipher, encrypt=True) + tld
+
+
+def decrypt_email(encrypted_email: str, cipher: FF1) -> str:
+    """Decrypt an email address."""
+    local, body, tld = _split(encrypted_email)
+    return _transform(local, cipher, encrypt=False) + "@" + _transform(body, cipher, encrypt=False) + tld
 
 
 def main():
-    # Create a 128-bit key (use a secure random key in production!)
-    key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
-    
-    # Create FFX encrypter with radix=36 (alphanumeric: 0-9, a-z)
-    ffx_obj = ffx.new(key.to_bytes(16), radix=36)
-    
-    # Example email addresses
+    cipher = FF1(KEY, radix=36, allow_small_domain=True)
+
     emails = [
-        "john.doe@example.com",
-        "alice+newsletter@company.org",
-        "user123@mail-server.co.uk",
-        "contact@subdomain.example.com",
+        "alice@example.com",
+        "bob.smith@company.org",
+        "info+tag@sub-domain.example.net",
+        "kpdyer@gmail.com",
     ]
-    
-    print("Email Address Format-Preserving Encryption Demo")
-    print("=" * 60)
-    
+
+    print("Email Format-Preserving Encryption")
+    print("=" * 50)
+
     for email in emails:
-        encrypted = encrypt_email(email, ffx_obj)
-        decrypted = decrypt_email(encrypted, ffx_obj)
-        
+        encrypted = encrypt_email(email, cipher)
+        decrypted = decrypt_email(encrypted, cipher)
+
         print(f"\nOriginal:  {email}")
         print(f"Encrypted: {encrypted}")
         print(f"Decrypted: {decrypted}")
-        print(f"Verified:  {'✓' if decrypted == email.lower() else '✗'}")
+        print(f"Verified:  {'ok' if email.lower() == decrypted else 'MISMATCH'}")
 
 
 if __name__ == "__main__":

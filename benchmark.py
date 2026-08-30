@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark script for FFX encryption/decryption performance.
+"""Benchmark script for FF1 encryption/decryption performance.
 
 Two modes:
 
@@ -24,11 +24,11 @@ import random
 import statistics
 import time
 
-import ffx
-from ffx import FFXInteger
+from ffx import FF1
 
+BASE36 = "0123456789abcdefghijklmnopqrstuvwxyz"
 
-# (radix, tweak size, message size, label) used by the default sweep.
+# (radix, tweak size in bytes, message size, label) used by the default sweep.
 SWEEP_CONFIGS = [
     (2, 8, 32, "binary, 32-bit"),
     (10, 0, 9, "decimal SSN (no tweak)"),
@@ -40,42 +40,41 @@ SWEEP_CONFIGS = [
 ]
 
 
-def _random_ffx(radix, size):
-    """Random FFXInteger with `size` digits in the given radix."""
-    value = random.randint(0, radix ** size - 1)
-    return FFXInteger(value, radix=radix, blocksize=size)
+def _random_message(rng, radix, size):
+    """Random numeral string with `size` digits in the given radix."""
+    alphabet = BASE36[:radix]
+    return "".join(rng.choice(alphabet) for _ in range(size))
 
 
-def time_config(ffx_obj, radix, tweaksize, messagesize, iterations, warmup):
+def time_config(cipher, radix, tweaksize, messagesize, iterations, warmup):
     """Time one configuration.
 
     Returns a dict with encrypt/decrypt latency stats (microseconds) and
     throughput (ops/sec). Raises AssertionError if any round-trip fails.
     """
+    rng = random.Random()
+
     # Pre-generate inputs so timing excludes RNG / object construction.
-    samples = []
-    for _ in range(iterations):
-        if tweaksize > 0:
-            tweak = _random_ffx(radix, tweaksize)
-        else:
-            tweak = 0
-        samples.append((tweak, _random_ffx(radix, messagesize)))
+    samples = [
+        (rng.randbytes(tweaksize), _random_message(rng, radix, messagesize))
+        for _ in range(iterations)
+    ]
 
     # Warmup: build the per-length parameter cache and prime the interpreter.
     for tweak, msg in samples[: max(1, min(warmup, len(samples)))]:
-        ffx_obj.decrypt(tweak, ffx_obj.encrypt(tweak, msg))
+        cipher.decrypt(cipher.encrypt(msg, tweak=tweak), tweak=tweak)
 
     enc_times, dec_times = [], []
     enc_total = dec_total = 0.0
     for tweak, msg in samples:
         start = time.perf_counter()
-        cipher = ffx_obj.encrypt(tweak, msg)
+        ciphertext = cipher.encrypt(msg, tweak=tweak)
         dt = time.perf_counter() - start
         enc_times.append(dt * 1e6)
         enc_total += dt
 
         start = time.perf_counter()
-        plain = ffx_obj.decrypt(tweak, cipher)
+        plain = cipher.decrypt(ciphertext, tweak=tweak)
         dt = time.perf_counter() - start
         dec_times.append(dt * 1e6)
         dec_total += dt
@@ -106,9 +105,9 @@ def _print_row(label, radix, tweaksize, messagesize, result):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Benchmark FFX encryption/decryption")
-    parser.add_argument("--radix", type=int, help="Radix for FFX (2-36); single-config mode")
-    parser.add_argument("--tweaksize", type=int, default=8, help="Tweak size in radix digits")
+    parser = argparse.ArgumentParser(description="Benchmark FF1 encryption/decryption")
+    parser.add_argument("--radix", type=int, help="Radix for FF1 (2-36); single-config mode")
+    parser.add_argument("--tweaksize", type=int, default=8, help="Tweak size in bytes")
     parser.add_argument("--messagesize", type=int, help="Message size in radix digits; single-config mode")
     parser.add_argument("--iterations", type=int, default=5000, help="Timed iterations per config")
     parser.add_argument("--warmup", type=int, default=200, help="Warmup iterations per config")
@@ -119,8 +118,8 @@ def main():
         random.seed(args.seed)
 
     # Random 128-bit key.
-    key = FFXInteger(random.randint(0, 2 ** 128 - 1), radix=2, blocksize=128)
-    print(f"KEY=0x{key.to_int():032x}  iterations={args.iterations}  warmup={args.warmup}")
+    key = random.getrandbits(128).to_bytes(16, "big")
+    print(f"KEY=0x{key.hex()}  iterations={args.iterations}  warmup={args.warmup}")
     print("-" * 100)
 
     single = args.radix is not None or args.messagesize is not None
@@ -132,8 +131,8 @@ def main():
         configs = SWEEP_CONFIGS
 
     for radix, tweaksize, messagesize, label in configs:
-        ffx_obj = ffx.new(key.to_bytes(16), radix)
-        result = time_config(ffx_obj, radix, tweaksize, messagesize, args.iterations, args.warmup)
+        cipher = FF1(key, radix=radix, allow_small_domain=True)
+        result = time_config(cipher, radix, tweaksize, messagesize, args.iterations, args.warmup)
         _print_row(label, radix, tweaksize, messagesize, result)
 
 

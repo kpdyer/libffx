@@ -1,30 +1,33 @@
 #!/usr/bin/env python3
-"""Example usage of the FFX library."""
+"""Example usage of the ffx library (NIST SP 800-38G FF1)."""
 
-import ffx
+import secrets
+
+from ffx import FF1
 
 
 def main():
-    # Set up parameters
-    radix = 2
-    blocksize = 2 ** 10  # 1024 bits
+    key = secrets.token_bytes(16)  # AES-128; 24 or 32 bytes also work
 
-    # Create key, tweak, and message
-    K = ffx.FFXInteger('0' * 128, radix=radix, blocksize=128)
-    T = ffx.FFXInteger('0' * blocksize, radix=radix, blocksize=blocksize)
-    X = ffx.FFXInteger('0' * blocksize, radix=radix, blocksize=blocksize)
+    # Strings over a numeral alphabet (here decimal digits).
+    cipher = FF1(key, radix=10)
+    plaintext = "4111111111111111"
+    tweak = b"card-2026"
 
-    # Create FFX encrypter
-    ffx_obj = ffx.new(K.to_bytes(16), radix=radix)
+    ciphertext = cipher.encrypt(plaintext, tweak=tweak)
+    decrypted = cipher.decrypt(ciphertext, tweak=tweak)
 
-    # Encrypt and decrypt
-    C = ffx_obj.encrypt(T, X)
-    Y = ffx_obj.decrypt(T, C)
+    print(f"Plaintext:  {plaintext}")
+    print(f"Ciphertext: {ciphertext}")
+    print(f"Decrypted:  {decrypted}")
+    print(f"Roundtrip successful: {plaintext == decrypted}")
 
-    print(f"Plaintext:  {X}")
-    print(f"Ciphertext: {C}")
-    print(f"Decrypted:  {Y}")
-    print(f"\nRoundtrip successful: {X == Y}")
+    # Integers in an arbitrary domain [0, N).
+    n = 123_456_789
+    encrypted = cipher.encrypt_int(n, domain=10**9, tweak=tweak)
+    print(f"\nInteger:    {n}")
+    print(f"Encrypted:  {encrypted}")
+    print(f"Decrypted:  {cipher.decrypt_int(encrypted, domain=10**9, tweak=tweak)}")
 
 
 if __name__ == "__main__":

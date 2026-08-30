@@ -1,0 +1,392 @@
+"""NIST SP 800-38G FF1 format-preserving encryption.
+
+Implements Algorithm 7 (FF1.Encrypt) and Algorithm 8 (FF1.Decrypt) of
+NIST SP 800-38G with AES-128/192/256 as the underlying block cipher.
+
+FF1 is a 10-round Feistel network over numeral strings in an arbitrary
+radix. The round function is an AES-CBC-MAC (zero IV) over a fixed header
+block P and a per-round block sequence Q, extended with counter-mode-style
+blocks when more output bytes are needed.
+
+This module also provides an integer-domain construction (``encrypt_int`` /
+``decrypt_int``): FF1 over radix-2 numeral strings of minimal length for
+the domain, with cycle walking to stay inside the domain. That construction
+is a wire contract; do not change it.
+"""
+
+from __future__ import annotations
+
+import string
+from typing import NamedTuple
+
+from Crypto.Cipher import AES
+
+from .exceptions import AlphabetError, DomainError, KeyLengthError
+
+#: Default numerals for radix-N instances (radix 2..36), per the FFX
+#: convention: digits then lowercase letters.
+_BASE36_ALPHABET = string.digits + string.ascii_lowercase
+
+_NUM_ROUNDS = 10
+
+#: Minimum domain size (radix**n or the integer domain N) per
+#: Draft SP 800-38G Rev 1.
+_MIN_DOMAIN = 1_000_000
+
+#: Relaxed minimum domain size (the original SP 800-38G floor), opted into
+#: with allow_small_domain=True.
+_MIN_DOMAIN_SMALL = 100
+
+_MAX_ALPHABET = 65536
+
+_MAX_TWEAK_BYTES = 2 ** 32  # exclusive: len(tweak) must be < 2**32
+
+
+class _FParams(NamedTuple):
+    """Cached, (radix, n, t)-dependent parameters for the round function.
+
+    Everything here is a pure function of the radix, the message length
+    ``n``, the tweak length ``t``, and the key, so it is computed once per
+    distinct (radix, n, t) and reused across rounds and calls.
+    """
+
+    P: bytes          # fixed 16-byte header block
+    e_p: int          # AES(P) as an int: the CBC-MAC chain value after block P
+    b_bytes: int      # width, in bytes, of the NUM(B) field appended to Q
+    d: int            # number of S bytes consumed before reduction (SP 800-38G d)
+    q_zero_pad: int   # zero bytes between the tweak and the round byte in Q
+    mod_even: int     # radix ** u, the modulus on even rounds
+    mod_odd: int      # radix ** v, the modulus on odd rounds
+
+
+class FF1:
+    """NIST SP 800-38G FF1 format-preserving encryption.
+
+    Args:
+        key: AES key; exactly 16, 24, or 32 bytes (AES-128/192/256).
+        radix: Base for the message alphabet, 2-36. The alphabet is
+            ``"0123456789abcdefghijklmnopqrstuvwxyz"[:radix]``.
+        alphabet: Explicit alphabet string (any unique Unicode characters,
+            length 2-65536). At most one of ``radix``/``alphabet`` may be
+            given; with neither, only ``encrypt_int``/``decrypt_int`` work.
+        allow_small_domain: Relax the minimum domain size from 1,000,000
+            (Draft SP 800-38G Rev 1) to 100 (original SP 800-38G).
+
+    Example:
+        >>> cipher = FF1(bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c"),
+        ...              radix=10)
+        >>> cipher.encrypt("0123456789")
+        '2433477484'
+        >>> cipher.decrypt("2433477484")
+        '0123456789'
+    """
+
+    # For a CBC-MAC over this many 16-byte blocks or fewer, folding the
+    # blocks through the persistent ECB cipher in Python beats constructing
+    # a fresh AES-CBC object (which re-runs the AES key schedule). Above
+    # this size the per-block Python overhead dominates and the C CBC path
+    # is faster; the crossover is between 3 and 4 blocks in practice.
+    _MAC_INLINE_MAX_BLOCKS = 3
+
+    def __init__(
+        self,
+        key: bytes,
+        *,
+        radix: int | None = None,
+        alphabet: str | None = None,
+        allow_small_domain: bool = False,
+    ):
+        if not isinstance(key, (bytes, bytearray)):
+            raise TypeError(f"key must be bytes, got {type(key).__name__}")
+        key = bytes(key)
+        if len(key) not in (16, 24, 32):
+            raise KeyLengthError(
+                "key must be exactly 16, 24, or 32 bytes "
+                f"(AES-128/192/256), got {len(key)}"
+            )
+
+        if radix is not None and alphabet is not None:
+            raise AlphabetError("pass at most one of radix= and alphabet=")
+        if radix is not None:
+            if not isinstance(radix, int) or isinstance(radix, bool):
+                raise AlphabetError(
+                    f"radix must be an int, got {type(radix).__name__}"
+                )
+            if not 2 <= radix <= 36:
+                raise AlphabetError(f"radix must be in [2, 36], got {radix}")
+            alphabet = _BASE36_ALPHABET[:radix]
+        elif alphabet is not None:
+            if not isinstance(alphabet, str):
+                raise AlphabetError(
+                    f"alphabet must be a str, got {type(alphabet).__name__}"
+                )
+            if len(alphabet) < 2:
+                raise AlphabetError(
+                    "alphabet must contain at least 2 characters"
+                )
+            if len(alphabet) > _MAX_ALPHABET:
+                raise AlphabetError(
+                    f"alphabet must contain at most {_MAX_ALPHABET} characters"
+                )
+            if len(set(alphabet)) != len(alphabet):
+                raise AlphabetError("alphabet characters must be unique")
+
+        self._alphabet = alphabet
+        self._radix = len(alphabet) if alphabet is not None else None
+        self._char_to_digit = (
+            {c: i for i, c in enumerate(alphabet)} if alphabet is not None else None
+        )
+        self._allow_small_domain = bool(allow_small_domain)
+        self._min_domain = (
+            _MIN_DOMAIN_SMALL if allow_small_domain else _MIN_DOMAIN
+        )
+
+        self._key = key
+        # MODE_ECB here is pycryptodome's spelling of the raw single-block
+        # AES primitive, which SP 800-38G builds FF1 from (the CBC-MAC chain
+        # in _F and the S-extension blocks are each one-block CIPH_K calls).
+        # No multi-block data is ever encrypted in ECB mode.
+        self._ecb = AES.new(key, AES.MODE_ECB)
+        # Per-(radix, message length, tweak length) parameter cache; see
+        # _FParams. radix is part of the key because encrypt_int always
+        # runs at radix 2, independent of the instance's alphabet.
+        self._param_cache: dict[tuple[int, int, int], _FParams] = {}
+
+    # ------------------------------------------------------------------
+    # String API
+    # ------------------------------------------------------------------
+
+    def encrypt(self, plaintext: str, *, tweak: bytes = b"") -> str:
+        """Encrypt a numeral string; returns a same-length string over the
+        same alphabet."""
+        return self._crypt_str(plaintext, tweak, encrypt=True)
+
+    def decrypt(self, ciphertext: str, *, tweak: bytes = b"") -> str:
+        """Decrypt a numeral string; inverse of :meth:`encrypt` for the
+        same key and tweak."""
+        return self._crypt_str(ciphertext, tweak, encrypt=False)
+
+    def _crypt_str(self, message: str, tweak: bytes, *, encrypt: bool) -> str:
+        tweak = self._check_tweak(tweak)
+        if self._alphabet is None:
+            raise AlphabetError(
+                "this FF1 instance was built without a numeral alphabet; "
+                "pass radix= or alphabet= to FF1() to work with strings"
+            )
+        if not isinstance(message, str):
+            raise TypeError(
+                f"message must be a str, got {type(message).__name__}"
+            )
+
+        radix = self._radix
+        n = len(message)
+        if n < 2 or radix ** n < self._min_domain:
+            raise DomainError(
+                f"message of length {n} over radix {radix} gives a domain "
+                f"below the minimum (need length >= 2 and radix**length >= "
+                f"{self._min_domain})"
+            )
+
+        u = n // 2
+        a = self._str_to_int(message[:u])
+        b = self._str_to_int(message[u:])
+        if encrypt:
+            a, b = self._encrypt_core(radix, n, a, b, tweak)
+        else:
+            a, b = self._decrypt_core(radix, n, a, b, tweak)
+        return self._int_to_str(a, u) + self._int_to_str(b, n - u)
+
+    # ------------------------------------------------------------------
+    # Integer API (normative wire contract; see module docstring)
+    # ------------------------------------------------------------------
+
+    def encrypt_int(self, x: int, *, domain: int, tweak: bytes = b"") -> int:
+        """Encrypt an integer 0 <= x < domain to another integer in the
+        same range, via FF1 at radix 2 over (domain-1).bit_length() bits
+        with cycle walking."""
+        tweak = self._check_tweak(tweak)
+        n = self._check_int_args(x, domain)
+        v = n - n // 2
+        mask = (1 << v) - 1
+        y = x
+        while True:
+            a, b = self._encrypt_core(2, n, y >> v, y & mask, tweak)
+            y = (a << v) | b
+            if y < domain:
+                return y
+
+    def decrypt_int(self, y: int, *, domain: int, tweak: bytes = b"") -> int:
+        """Inverse of :meth:`encrypt_int` for the same key, domain, and
+        tweak."""
+        tweak = self._check_tweak(tweak)
+        n = self._check_int_args(y, domain)
+        v = n - n // 2
+        mask = (1 << v) - 1
+        x = y
+        while True:
+            a, b = self._decrypt_core(2, n, x >> v, x & mask, tweak)
+            x = (a << v) | b
+            if x < domain:
+                return x
+
+    def _check_int_args(self, x: int, domain: int) -> int:
+        """Validate (x, domain) and return the bit length n of the Feistel
+        state: the smallest n with 2**n >= domain."""
+        if not isinstance(domain, int) or isinstance(domain, bool):
+            raise TypeError(
+                f"domain must be an int, got {type(domain).__name__}"
+            )
+        if domain < self._min_domain:
+            raise DomainError(
+                f"domain {domain} is below the minimum {self._min_domain}"
+            )
+        if not isinstance(x, int) or isinstance(x, bool):
+            raise TypeError(f"value must be an int, got {type(x).__name__}")
+        if not 0 <= x < domain:
+            raise DomainError(f"value {x} is outside [0, {domain})")
+        return (domain - 1).bit_length()
+
+    # ------------------------------------------------------------------
+    # Shared validation and numeral conversion
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _check_tweak(tweak: bytes) -> bytes:
+        if not isinstance(tweak, (bytes, bytearray)):
+            raise TypeError(
+                f"tweak must be bytes, got {type(tweak).__name__}"
+            )
+        if len(tweak) >= _MAX_TWEAK_BYTES:
+            raise ValueError("tweak must be shorter than 2**32 bytes")
+        return bytes(tweak)
+
+    def _str_to_int(self, s: str) -> int:
+        """NUM_radix(s): fold a numeral string to an integer via the
+        instance alphabet."""
+        radix = self._radix
+        lookup = self._char_to_digit
+        x = 0
+        try:
+            for ch in s:
+                x = x * radix + lookup[ch]
+        except KeyError:
+            bad = next(ch for ch in s if ch not in lookup)
+            raise AlphabetError(
+                f"character {bad!r} is not in the alphabet"
+            ) from None
+        return x
+
+    def _int_to_str(self, x: int, width: int) -> str:
+        """STR_radix(x, width): unfold an integer to a fixed-width numeral
+        string via the instance alphabet."""
+        radix = self._radix
+        alphabet = self._alphabet
+        out = []
+        for _ in range(width):
+            x, digit = divmod(x, radix)
+            out.append(alphabet[digit])
+        return "".join(reversed(out))
+
+    # ------------------------------------------------------------------
+    # FF1 core (SP 800-38G Algorithms 7 and 8)
+    # ------------------------------------------------------------------
+
+    def _params(self, radix: int, n: int, t: int) -> _FParams:
+        cache_key = (radix, n, t)
+        params = self._param_cache.get(cache_key)
+        if params is not None:
+            return params
+
+        u = n // 2
+        v = n - u
+        # b = ceil(ceil(v * log2(radix)) / 8), computed exactly:
+        # ceil(v * log2(radix)) == ceil(log2(radix**v)) == (radix**v - 1).bit_length()
+        b_bytes = ((radix ** v - 1).bit_length() + 7) // 8
+        d = 4 * ((b_bytes + 3) // 4) + 4
+
+        # P is the fixed 16-byte header block for this (radix, n, t).
+        # Because it never changes, its CBC-MAC first-block image AES(P) is
+        # precomputed once here.
+        P = (
+            b"\x01\x02\x01"
+            + radix.to_bytes(3, "big")
+            + b"\x0a"                      # always ten rounds
+            + bytes((u % 256,))
+            + n.to_bytes(4, "big")
+            + t.to_bytes(4, "big")
+        )
+        e_p = int.from_bytes(self._ecb.encrypt(P), "big")
+
+        params = _FParams(
+            P=P,
+            e_p=e_p,
+            b_bytes=b_bytes,
+            d=d,
+            # Zero bytes between the tweak and the round byte so that
+            # len(Q) is a multiple of 16 (P is already one whole block).
+            q_zero_pad=(-t - b_bytes - 1) % 16,
+            mod_even=radix ** u,
+            mod_odd=radix ** v,
+        )
+        self._param_cache[cache_key] = params
+        return params
+
+    def _F(self, params: _FParams, q_prefix: bytes, i: int, b_int: int) -> int:
+        """The FF1 round function: y = NUM(S) for round i and right half
+        NUM(B) = b_int (not yet reduced modulo radix**m)."""
+        # Q = tweak || zero pad || [i] || NUM(B) as b bytes.
+        Q = q_prefix + bytes((i,)) + b_int.to_bytes(params.b_bytes, "big")
+
+        # R = CBC-MAC_K(P || Q) with a zero IV; only the final block is
+        # needed. P is a single block whose image AES(P) is cached, so the
+        # chain starts from it and folds in the Q blocks. For short
+        # payloads, folding through the persistent ECB cipher avoids
+        # rebuilding an AES-CBC object (and its key schedule) every round;
+        # for long payloads the C CBC path wins.
+        ecb_encrypt = self._ecb.encrypt
+        if (len(Q) >> 4) + 1 <= self._MAC_INLINE_MAX_BLOCKS:
+            r_int = params.e_p
+            for off in range(0, len(Q), 16):
+                blk = int.from_bytes(Q[off:off + 16], "big") ^ r_int
+                r_int = int.from_bytes(ecb_encrypt(blk.to_bytes(16, "big")), "big")
+        else:
+            cbc = AES.new(self._key, AES.MODE_CBC, b"\x00" * 16)
+            r_int = int.from_bytes(cbc.encrypt(params.P + Q)[-16:], "big")
+
+        # S = first d bytes of R || AES(R xor [1]) || AES(R xor [2]) || ...
+        # The extension blocks are mutually independent, so they are
+        # concatenated and encrypted in a single ECB call.
+        d = params.d
+        if d <= 16:
+            return r_int >> (8 * (16 - d))
+        extra_blocks = -(-(d - 16) // 16)
+        buf = b"".join(
+            (r_int ^ j).to_bytes(16, "big") for j in range(1, extra_blocks + 1)
+        )
+        S = r_int.to_bytes(16, "big") + ecb_encrypt(buf)
+        return int.from_bytes(S[:d], "big")
+
+    def _encrypt_core(
+        self, radix: int, n: int, a: int, b: int, tweak: bytes
+    ) -> tuple[int, int]:
+        """SP 800-38G Algorithm 7 on integer halves (a, b) = (NUM(A), NUM(B))."""
+        params = self._params(radix, n, len(tweak))
+        q_prefix = tweak + b"\x00" * params.q_zero_pad
+        mod_even, mod_odd = params.mod_even, params.mod_odd
+        for i in range(_NUM_ROUNDS):
+            y = self._F(params, q_prefix, i, b)
+            a, b = b, (a + y) % (mod_odd if i & 1 else mod_even)
+        return a, b
+
+    def _decrypt_core(
+        self, radix: int, n: int, a: int, b: int, tweak: bytes
+    ) -> tuple[int, int]:
+        """SP 800-38G Algorithm 8 on integer halves (a, b) = (NUM(A), NUM(B))."""
+        params = self._params(radix, n, len(tweak))
+        q_prefix = tweak + b"\x00" * params.q_zero_pad
+        mod_even, mod_odd = params.mod_even, params.mod_odd
+        for i in range(_NUM_ROUNDS - 1, -1, -1):
+            c, b = b, a
+            y = self._F(params, q_prefix, i, b)
+            a = (c - y) % (mod_odd if i & 1 else mod_even)
+        return a, b

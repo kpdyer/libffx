@@ -1,189 +1,132 @@
-# FFX - Format Preserving Encryption
+# libffx - FF1 Format-Preserving Encryption
 
 [![PyPI version](https://img.shields.io/pypi/v/libffx.svg)](https://pypi.org/project/libffx/)
 [![Tests](https://github.com/kpdyer/libffx/actions/workflows/tests.yml/badge.svg)](https://github.com/kpdyer/libffx/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Python implementation of the FFX Mode of Operation for Format-Preserving Encryption (FPE).
+A pure-Python implementation of **NIST SP 800-38G FF1** format-preserving
+encryption (FPE), with AES-128/192/256.
 
-Format-preserving encryption encrypts data while preserving its format. For example, a 16-digit credit card number encrypts to another 16-digit number, and a 9-digit SSN encrypts to another 9-digit number.
-
-## Specification
-
-This implementation follows the NIST FFX-A2 specification:
-
-- [FFX Spec (original)](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec.pdf)
-- [FFX Spec (addendum)](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/ffx-spec2.pdf)
-
-### Algorithm Details
-
-- **Cipher**: AES-128
-- **Mode**: Maximally-balanced Feistel network
-- **Rounds**: 10 (constant, independent of message size)
-- **Radix**: Supports 2–36 (binary through alphanumeric)
-- **Message sizes**: Tested with 2–128+ characters
+Format-preserving encryption encrypts data while preserving its format: a
+16-digit credit card number encrypts to another 16-digit number, and a DNA
+string over `ACGT` encrypts to another DNA string of the same length.
 
 ## Installation
 
 ```bash
-pip install -e .
+pip install libffx
 ```
 
-Or install dependencies directly:
-
-```bash
-pip install -r requirements.txt
-```
-
-### Dependencies
-
-- `gmpy2` - Fast arbitrary precision arithmetic
-- `pycryptodome` - AES implementation
+The only dependency is `pycryptodome` (for AES). Python 3.10+.
 
 ## Quick Start
 
 ```python
-import ffx
+from ffx import FF1
 
-# Create key, tweak, and plaintext
-key = ffx.FFXInteger('0' * 128, radix=2, blocksize=128)
-tweak = ffx.FFXInteger('0' * 8, radix=2, blocksize=8)
-plaintext = ffx.FFXInteger('0' * 8, radix=2, blocksize=8)
+key = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")  # 16, 24, or 32 bytes
 
-# Create encrypter (radix=2 for binary)
-ffx_obj = ffx.new(key.to_bytes(16), radix=2)
+# Numeral strings (radix 2-36, or any custom alphabet)
+cipher = FF1(key, radix=10)
+ciphertext = cipher.encrypt("4111111111111111", tweak=b"account-42")
+plaintext = cipher.decrypt(ciphertext, tweak=b"account-42")
 
-# Encrypt and decrypt
-ciphertext = ffx_obj.encrypt(tweak, plaintext)
-decrypted = ffx_obj.decrypt(tweak, ciphertext)
+# Custom alphabets (any unique Unicode characters, up to 65536)
+dna = FF1(key, alphabet="ACGT")
+encrypted = dna.encrypt("ACGTACGTACGT")
 
-print(f"Plaintext:  {plaintext}")   # 00000000
-print(f"Ciphertext: {ciphertext}")  # 10100010
-print(f"Decrypted:  {decrypted}")   # 00000000
+# Integers in an arbitrary domain [0, N)
+plain = FF1(key)  # no alphabet needed for the integer API
+y = plain.encrypt_int(123456789, domain=10**9)
+x = plain.decrypt_int(y, domain=10**9)
 ```
 
-### Encrypting Credit Card Numbers (Radix 10)
+## API
+
+#### `FF1`
 
 ```python
-import ffx
-
-# 128-bit key (as hex)
-key = ffx.FFXInteger('2b7e151628aed2a6abf7158809cf4f3c', radix=16, blocksize=32)
-
-# Create encrypter for decimal digits
-ffx_obj = ffx.new(key.to_bytes(16), radix=10)
-
-# Encrypt a credit card number
-cc_number = ffx.FFXInteger('4111111111111111', radix=10, blocksize=16)
-tweak = ffx.FFXInteger('0000000000', radix=10, blocksize=10)
-
-encrypted = ffx_obj.encrypt(tweak, cc_number)
-print(f"Encrypted: {encrypted}")  # Another 16-digit number
+FF1(key, *, radix=None, alphabet=None, allow_small_domain=False)
 ```
 
-## Running Tests
+- `key`: exactly 16, 24, or 32 bytes (AES-128/192/256); else `KeyLengthError`.
+- `radix`: 2-36; the alphabet is `"0123456789abcdefghijklmnopqrstuvwxyz"[:radix]`.
+- `alphabet`: explicit alphabet string (2-65536 unique Unicode characters).
+  At most one of `radix`/`alphabet` may be given. With neither, only the
+  integer API is available.
+- `allow_small_domain`: relax the minimum domain from 1,000,000 (Draft
+  SP 800-38G Rev 1) to 100 (original SP 800-38G).
 
-The test suite validates the implementation against official Voltage Security test vectors.
+#### `encrypt` / `decrypt`
+
+```python
+encrypt(plaintext, *, tweak=b"") -> str
+decrypt(ciphertext, *, tweak=b"") -> str
+```
+
+Encrypt/decrypt a numeral string. Output has the same length over the same
+alphabet. Input is case- and character-exact (no normalization); characters
+outside the alphabet raise `AlphabetError`. The message length `n` must
+satisfy `n >= 2` and `radix**n >= 1_000_000` (or `>= 100` with
+`allow_small_domain=True`); otherwise `DomainError`.
+
+Tweaks are arbitrary bytes (`len < 2**32`) acting as public associated data:
+the same plaintext under different tweaks yields unrelated ciphertexts.
+
+#### `encrypt_int` / `decrypt_int`
+
+```python
+encrypt_int(x, *, domain, tweak=b"") -> int
+decrypt_int(y, *, domain, tweak=b"") -> int
+```
+
+Encrypt an integer `0 <= x < domain` to another integer in the same range.
+Internally this runs FF1 at radix 2 over `(domain - 1).bit_length()` bits and
+cycle-walks until the result lands inside the domain. Results depend only on
+(key, domain, tweak), not on the instance's `radix`/`alphabet`, so the
+construction is stable across instances and releases.
+
+## Security notes
+
+- **Deterministic**: FF1 is a deterministic permutation. Equal plaintexts
+  under the same key and tweak produce equal ciphertexts. Use tweaks
+  (e.g. a record identifier) to prevent cross-record equality leakage.
+- **Domain minimums**: small domains are fundamentally weak for FPE. The
+  default floor of 1,000,000 follows Draft SP 800-38G Rev 1;
+  `allow_small_domain=True` opts into the original floor of 100; use it
+  only when you understand the risk.
+- Always use cryptographically random keys (e.g. `secrets.token_bytes(16)`).
+
+## Migrating from v1 (FFX[radix])
+
+v1 implemented the FFX[radix] addendum profile, which is FF1 with the tweak
+taken as a numeral string instead of raw bytes. **FF1 with the old tweak
+string encoded as ASCII bytes reproduces v1 FFX[radix] ciphertexts
+exactly** (v1 rendered radix-36 strings in lowercase):
+
+```python
+# v1 encrypted "0123456789" under the tweak string "9876543210"; in v2:
+FF1(key, radix=10).encrypt("0123456789", tweak=b"9876543210")  # '6124200773'
+```
+
+The v1 wrapper classes and factory function are gone, along with the
+big-integer dependency. `tests/test_legacy_compat.py` verifies every vector in
+[aes-ffx-vectors.txt](aes-ffx-vectors.txt) against the new API.
+
+## Testing and benchmarks
 
 ```bash
-pytest
+pytest              # NIST FF1 sample vectors, v1 compat vectors, sweeps
+python benchmark.py # performance sweep across radices and sizes
 ```
 
-Or with verbose output:
+Test vectors:
 
-```bash
-pytest -v
-```
-
-### Test Vectors
-
-Test vectors from the official NIST submission: [aes-ffx-vectors.txt](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt)
-
-| Vector | Radix | Input            | Tweak            | Expected Output  |
-|--------|-------|------------------|------------------|------------------|
-| 1      | 10    | 0123456789       | 9876543210       | 6124200773       |
-| 2      | 10    | 0123456789       | (none)           | 2433477484       |
-| 3      | 10    | 314159           | 2718281828       | 535005           |
-| 4      | 10    | 999999999        | 7777777          | 658229573        |
-| 5      | 36    | C4XPWULBM3M863JH | TQF9J5QDAGSCSPB1 | C8AQ3U846ZWH6QZP |
-
-## Benchmarks
-
-Run the default sweep across representative radices and message sizes:
-
-```bash
-python benchmark.py
-```
-
-Or time a single configuration:
-
-```bash
-python benchmark.py --radix 10 --tweaksize 10 --messagesize 16
-```
-
-Each configuration is warmed up, then every op is timed individually and
-validated with an encrypt/decrypt round-trip. Example output:
-
-```
-KEY=0x...  iterations=5000  warmup=200
-----------------------------------------------------------------------------
-decimal SSN              r=10 t=10  n=9   | enc   46.9us (...)   20,851/s | dec   46.9us   20,838/s
-decimal credit card      r=10 t=10  n=16  | enc   46.7us (...)   20,879/s | dec   46.7us   20,919/s
-base36, 16-char          r=36 t=16  n=16  | enc   63.6us (...)   15,332/s | dec   63.2us   15,410/s
-```
-
-## Project Structure
-
-```
-libffx/
-├── ffx/
-│   └── __init__.py       # FFX implementation
-├── tests/
-│   └── test_ffx.py       # Test suite
-├── pyproject.toml        # Package configuration
-├── requirements.txt      # Dependencies
-├── example.py            # Usage example
-├── benchmark.py          # Performance benchmarks
-├── aes-ffx-vectors.txt   # Official NIST test vectors
-├── LICENSE
-└── README.md
-```
-
-## API Reference
-
-### `ffx.new(key, radix)`
-
-Create a new FFX encrypter.
-
-- `key`: 16-byte AES-128 key
-- `radix`: Base for message alphabet (2-36)
-
-### `FFXInteger(value, radix=2, blocksize=None)`
-
-Represent a value in a specific radix.
-
-- `value`: Integer, string representation, or another FFXInteger
-- `radix`: Base (2-36)
-- `blocksize`: Minimum string length (zero-padded)
-
-### `FFXEncrypter.encrypt(tweak, plaintext)`
-
-Encrypt a plaintext with an optional tweak.
-
-- `tweak`: FFXInteger or 0 for no tweak
-- `plaintext`: FFXInteger to encrypt
-
-### `FFXEncrypter.decrypt(tweak, ciphertext)`
-
-Decrypt a ciphertext with the same tweak used for encryption.
-
-## Security Considerations
-
-- FFX is designed for format-preserving encryption of small domains
-- The security depends on the domain size; very small domains may be vulnerable to brute force
-- Always use cryptographically random keys
-- Tweaks can be used as public "associated data" but should be unique per encryption when possible
+- Official NIST FF1 samples (AES-128/192/256) from the SP 800-38G
+  intermediate-values document: `tests/test_nist_vectors.py`
+- Legacy Voltage Security FFX[radix] vectors: `aes-ffx-vectors.txt`,
+  verified via `tests/test_legacy_compat.py`
 
 ## License
 
