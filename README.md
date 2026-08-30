@@ -44,7 +44,11 @@ x = plain.decrypt_int(y, domain=10**9)
 
 ## API
 
-### `FF1(key, *, radix=None, alphabet=None, allow_small_domain=False)`
+#### `FF1`
+
+```python
+FF1(key, *, radix=None, alphabet=None, allow_small_domain=False)
+```
 
 - `key`: exactly 16, 24, or 32 bytes (AES-128/192/256); else `KeyLengthError`.
 - `radix`: 2-36; the alphabet is `"0123456789abcdefghijklmnopqrstuvwxyz"[:radix]`.
@@ -54,7 +58,12 @@ x = plain.decrypt_int(y, domain=10**9)
 - `allow_small_domain`: relax the minimum domain from 1,000,000 (Draft
   SP 800-38G Rev 1) to 100 (original SP 800-38G).
 
-### `encrypt(plaintext, *, tweak=b"")` / `decrypt(ciphertext, *, tweak=b"")`
+#### `encrypt` / `decrypt`
+
+```python
+encrypt(plaintext, *, tweak=b"") -> str
+decrypt(ciphertext, *, tweak=b"") -> str
+```
 
 Encrypt/decrypt a numeral string. Output has the same length over the same
 alphabet. Input is case- and character-exact (no normalization); characters
@@ -65,7 +74,12 @@ satisfy `n >= 2` and `radix**n >= 1_000_000` (or `>= 100` with
 Tweaks are arbitrary bytes (`len < 2**32`) acting as public associated data:
 the same plaintext under different tweaks yields unrelated ciphertexts.
 
-### `encrypt_int(x, *, domain, tweak=b"")` / `decrypt_int(y, *, domain, tweak=b"")`
+#### `encrypt_int` / `decrypt_int`
+
+```python
+encrypt_int(x, *, domain, tweak=b"") -> int
+decrypt_int(y, *, domain, tweak=b"") -> int
+```
 
 Encrypt an integer `0 <= x < domain` to another integer in the same range.
 Internally this runs FF1 at radix 2 over `(domain - 1).bit_length()` bits and
@@ -113,21 +127,6 @@ Test vectors:
   intermediate-values document: `tests/test_nist_vectors.py`
 - Legacy Voltage Security FFX[radix] vectors: `aes-ffx-vectors.txt`,
   verified via `tests/test_legacy_compat.py`
-
-## Project Structure
-
-```
-libffx/
-├── ffx/
-│   ├── __init__.py       # public API: FF1 + exceptions
-│   ├── ff1.py            # SP 800-38G FF1 implementation
-│   └── exceptions.py     # FFXError, KeyLengthError, AlphabetError, DomainError
-├── tests/                # pytest suite
-├── examples/             # SSN, credit card, DNA, ... recipes
-├── aes-ffx-vectors.txt   # legacy v1 test vectors (still verified)
-├── example.py            # minimal usage example
-└── benchmark.py          # performance benchmarks
-```
 
 ## License
 
