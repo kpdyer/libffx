@@ -142,6 +142,10 @@ class FF1:
         )
 
         self._key = key
+        # MODE_ECB here is pycryptodome's spelling of the raw single-block
+        # AES primitive, which SP 800-38G builds FF1 from (the CBC-MAC chain
+        # in _F and the S-extension blocks are each one-block CIPH_K calls).
+        # No multi-block data is ever encrypted in ECB mode.
         self._ecb = AES.new(key, AES.MODE_ECB)
         # Per-(radix, message length, tweak length) parameter cache; see
         # _FParams. radix is part of the key because encrypt_int always
