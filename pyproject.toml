@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libffx"
-version = "2.0.0a1"
+version = "2.0.0"
 description = "FF1 format-preserving encryption (NIST SP 800-38G)"
 readme = "README_PYPI.md"
 license = {text = "MIT"}
