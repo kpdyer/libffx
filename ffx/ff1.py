@@ -19,7 +19,7 @@ from __future__ import annotations
 import string
 from typing import NamedTuple
 
-from Crypto.Cipher import AES
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .exceptions import AlphabetError, DomainError, KeyLengthError
 
@@ -82,11 +82,11 @@ class FF1:
     """
 
     # For a CBC-MAC over this many 16-byte blocks or fewer, folding the
-    # blocks through the persistent ECB cipher in Python beats constructing
-    # a fresh AES-CBC object (which re-runs the AES key schedule). Above
+    # blocks through the persistent ECB context in Python beats creating
+    # a fresh AES-CBC context (which re-runs the AES key schedule). Above
     # this size the per-block Python overhead dominates and the C CBC path
-    # is faster; the crossover is between 3 and 4 blocks in practice.
-    _MAC_INLINE_MAX_BLOCKS = 3
+    # is faster; the crossover is between 5 and 6 blocks in practice.
+    _MAC_INLINE_MAX_BLOCKS = 5
 
     def __init__(
         self,
@@ -142,11 +142,17 @@ class FF1:
         )
 
         self._key = key
-        # MODE_ECB here is pycryptodome's spelling of the raw single-block
-        # AES primitive, which SP 800-38G builds FF1 from (the CBC-MAC chain
-        # in _F and the S-extension blocks are each one-block CIPH_K calls).
-        # No multi-block data is ever encrypted in ECB mode.
-        self._ecb = AES.new(key, AES.MODE_ECB)
+        # ECB here is the raw single-block AES primitive, which SP 800-38G
+        # builds FF1 from (the CBC-MAC chain in _F and the S-extension
+        # blocks are each one-block CIPH_K calls). No multi-block data is
+        # ever encrypted in ECB mode. The encryptor context is persistent:
+        # ECB has no chaining state, so update() calls encrypt each aligned
+        # block independently and the OpenSSL key schedule runs only once.
+        aes = algorithms.AES(key)
+        self._ecb_encrypt = Cipher(aes, modes.ECB()).encryptor().update
+        # Cipher description for the long-MAC CBC path; encryptor() on it
+        # creates a fresh zero-IV context per call.
+        self._cbc_cipher = Cipher(aes, modes.CBC(b"\x00" * 16))
         # Per-(radix, message length, tweak length) parameter cache; see
         # _FParams. radix is part of the key because encrypt_int always
         # runs at radix 2, independent of the instance's alphabet.
@@ -315,7 +321,7 @@ class FF1:
             + n.to_bytes(4, "big")
             + t.to_bytes(4, "big")
         )
-        e_p = int.from_bytes(self._ecb.encrypt(P), "big")
+        e_p = int.from_bytes(self._ecb_encrypt(P), "big")
 
         params = _FParams(
             P=P,
@@ -340,18 +346,18 @@ class FF1:
         # R = CBC-MAC_K(P || Q) with a zero IV; only the final block is
         # needed. P is a single block whose image AES(P) is cached, so the
         # chain starts from it and folds in the Q blocks. For short
-        # payloads, folding through the persistent ECB cipher avoids
-        # rebuilding an AES-CBC object (and its key schedule) every round;
+        # payloads, folding through the persistent ECB context avoids
+        # creating a fresh CBC context (and its key schedule) every round;
         # for long payloads the C CBC path wins.
-        ecb_encrypt = self._ecb.encrypt
+        ecb_encrypt = self._ecb_encrypt
         if (len(Q) >> 4) + 1 <= self._MAC_INLINE_MAX_BLOCKS:
             r_int = params.e_p
             for off in range(0, len(Q), 16):
                 blk = int.from_bytes(Q[off:off + 16], "big") ^ r_int
                 r_int = int.from_bytes(ecb_encrypt(blk.to_bytes(16, "big")), "big")
         else:
-            cbc = AES.new(self._key, AES.MODE_CBC, b"\x00" * 16)
-            r_int = int.from_bytes(cbc.encrypt(params.P + Q)[-16:], "big")
+            cbc = self._cbc_cipher.encryptor()
+            r_int = int.from_bytes(cbc.update(params.P + Q)[-16:], "big")
 
         # S = first d bytes of R || AES(R xor [1]) || AES(R xor [2]) || ...
         # The extension blocks are mutually independent, so they are

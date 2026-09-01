@@ -18,7 +18,7 @@ string over `ACGT` encrypts to another DNA string of the same length.
 pip install libffx
 ```
 
-The only dependency is `pycryptodome` (for AES). Python 3.10+.
+The only dependency is `cryptography` (OpenSSL-backed AES). Python 3.10+.
 
 ## Quick Start
 

@@ -6,7 +6,7 @@
 
 A pure-Python implementation of **NIST SP 800-38G FF1** format-preserving
 encryption (FPE), with AES-128/192/256. The only dependency is
-`pycryptodome`.
+`cryptography` (OpenSSL-backed AES).
 
 Format-preserving encryption encrypts data while preserving its format: a
 16-digit credit card number encrypts to another 16-digit number.
