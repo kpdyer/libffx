@@ -7,7 +7,8 @@ name = "libffx"
 version = "2.0.0"
 description = "FF1 format-preserving encryption (NIST SP 800-38G)"
 readme = "README_PYPI.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Kevin P. Dyer", email = "kpdyer@gmail.com"}
 ]
@@ -18,7 +19,6 @@ keywords = ["cryptography", "encryption", "format-preserving", "ff1", "ffx", "fp
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

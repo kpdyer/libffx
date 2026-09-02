@@ -1,8 +1,18 @@
-"""Exception hierarchy for the ffx package."""
+"""Exception hierarchy for the ffx package.
+
+Every validation error raised by the package derives from :class:`FFXError`
+and from :class:`ValueError`. Arguments of the wrong *type* (a non-bytes key
+or tweak, a non-str message, a non-int radix, domain, or value) raise
+:class:`TypeError` instead, following the usual Python convention.
+"""
 
 
 class FFXError(Exception):
-    """Base class for all errors raised by the ffx package."""
+    """Base class for the validation errors raised by the ffx package:
+    :class:`KeyLengthError`, :class:`AlphabetError`, :class:`DomainError`.
+
+    Arguments of the wrong type raise :class:`TypeError`, not an
+    ``FFXError``."""
 
 
 class KeyLengthError(FFXError, ValueError):
@@ -15,5 +25,6 @@ class AlphabetError(FFXError, ValueError):
 
 
 class DomainError(FFXError, ValueError):
-    """Raised when a message or integer falls outside the permitted domain
-    (too short, domain below the minimum, or value out of range)."""
+    """Raised when a message, integer, or tweak falls outside the permitted
+    domain (message too short, domain below the minimum, value out of
+    range, or tweak of 2**32 bytes or more)."""

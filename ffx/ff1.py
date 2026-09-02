@@ -41,6 +41,15 @@ _MAX_ALPHABET = 65536
 
 _MAX_TWEAK_BYTES = 2 ** 32  # exclusive: len(tweak) must be < 2**32
 
+#: Largest number of AES blocks handed to the shared ECB context in one
+#: update() call. cryptography releases the GIL while encrypting a buffer
+#: of 2048 bytes or more, and its CipherContext stays exclusively borrowed
+#: until the call returns, so a second thread using the same context in
+#: that window fails with RuntimeError("Already borrowed"). Keeping every
+#: call below the threshold is what makes one FF1 instance safe to share
+#: between threads; ECB blocks are independent, so splitting is exact.
+_ECB_MAX_BLOCKS_PER_CALL = 127  # 127 * 16 = 2032 bytes
+
 
 class _FParams(NamedTuple):
     """Cached, (radix, n, t)-dependent parameters for the round function.
@@ -59,6 +68,42 @@ class _FParams(NamedTuple):
     mod_odd: int      # radix ** v, the modulus on odd rounds
 
 
+class _Numerals(NamedTuple):
+    """The numeral alphabet of a string-API instance, with the
+    SP 800-38G NUM/STR conversions over it. Integer-only instances
+    (no radix/alphabet) have none."""
+
+    alphabet: str
+    radix: int
+    char_to_digit: dict[str, int]
+
+    def to_int(self, s: str) -> int:
+        """NUM_radix(s): fold a numeral string to an integer."""
+        radix = self.radix
+        lookup = self.char_to_digit
+        x = 0
+        try:
+            for ch in s:
+                x = x * radix + lookup[ch]
+        except KeyError:
+            bad = next(ch for ch in s if ch not in lookup)
+            raise AlphabetError(
+                f"character {bad!r} is not in the alphabet"
+            ) from None
+        return x
+
+    def to_str(self, x: int, width: int) -> str:
+        """STR_radix(x, width): unfold an integer to a fixed-width numeral
+        string."""
+        radix = self.radix
+        alphabet = self.alphabet
+        out: list[str] = []
+        for _ in range(width):
+            x, digit = divmod(x, radix)
+            out.append(alphabet[digit])
+        return "".join(reversed(out))
+
+
 class FF1:
     """NIST SP 800-38G FF1 format-preserving encryption.
 
@@ -71,6 +116,8 @@ class FF1:
             given; with neither, only ``encrypt_int``/``decrypt_int`` work.
         allow_small_domain: Relax the minimum domain size from 1,000,000
             (Draft SP 800-38G Rev 1) to 100 (original SP 800-38G).
+
+    Instances keep no per-call state and may be shared between threads.
 
     Example:
         >>> cipher = FF1(bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c"),
@@ -109,7 +156,7 @@ class FF1:
             raise AlphabetError("pass at most one of radix= and alphabet=")
         if radix is not None:
             if not isinstance(radix, int) or isinstance(radix, bool):
-                raise AlphabetError(
+                raise TypeError(
                     f"radix must be an int, got {type(radix).__name__}"
                 )
             if not 2 <= radix <= 36:
@@ -117,7 +164,7 @@ class FF1:
             alphabet = _BASE36_ALPHABET[:radix]
         elif alphabet is not None:
             if not isinstance(alphabet, str):
-                raise AlphabetError(
+                raise TypeError(
                     f"alphabet must be a str, got {type(alphabet).__name__}"
                 )
             if len(alphabet) < 2:
@@ -131,10 +178,10 @@ class FF1:
             if len(set(alphabet)) != len(alphabet):
                 raise AlphabetError("alphabet characters must be unique")
 
-        self._alphabet = alphabet
-        self._radix = len(alphabet) if alphabet is not None else None
-        self._char_to_digit = (
-            {c: i for i, c in enumerate(alphabet)} if alphabet is not None else None
+        self._numerals = (
+            _Numerals(alphabet, len(alphabet), {c: i for i, c in enumerate(alphabet)})
+            if alphabet is not None
+            else None
         )
         self._allow_small_domain = bool(allow_small_domain)
         self._min_domain = (
@@ -174,7 +221,8 @@ class FF1:
 
     def _crypt_str(self, message: str, tweak: bytes, *, encrypt: bool) -> str:
         tweak = self._check_tweak(tweak)
-        if self._alphabet is None:
+        numerals = self._numerals
+        if numerals is None:
             raise AlphabetError(
                 "this FF1 instance was built without a numeral alphabet; "
                 "pass radix= or alphabet= to FF1() to work with strings"
@@ -184,7 +232,7 @@ class FF1:
                 f"message must be a str, got {type(message).__name__}"
             )
 
-        radix = self._radix
+        radix = numerals.radix
         n = len(message)
         if n < 2 or radix ** n < self._min_domain:
             raise DomainError(
@@ -194,13 +242,13 @@ class FF1:
             )
 
         u = n // 2
-        a = self._str_to_int(message[:u])
-        b = self._str_to_int(message[u:])
+        a = numerals.to_int(message[:u])
+        b = numerals.to_int(message[u:])
         if encrypt:
             a, b = self._encrypt_core(radix, n, a, b, tweak)
         else:
             a, b = self._decrypt_core(radix, n, a, b, tweak)
-        return self._int_to_str(a, u) + self._int_to_str(b, n - u)
+        return numerals.to_str(a, u) + numerals.to_str(b, n - u)
 
     # ------------------------------------------------------------------
     # Integer API (normative wire contract; see module docstring)
@@ -253,7 +301,7 @@ class FF1:
         return (domain - 1).bit_length()
 
     # ------------------------------------------------------------------
-    # Shared validation and numeral conversion
+    # Shared validation
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -263,35 +311,8 @@ class FF1:
                 f"tweak must be bytes, got {type(tweak).__name__}"
             )
         if len(tweak) >= _MAX_TWEAK_BYTES:
-            raise ValueError("tweak must be shorter than 2**32 bytes")
+            raise DomainError("tweak must be shorter than 2**32 bytes")
         return bytes(tweak)
-
-    def _str_to_int(self, s: str) -> int:
-        """NUM_radix(s): fold a numeral string to an integer via the
-        instance alphabet."""
-        radix = self._radix
-        lookup = self._char_to_digit
-        x = 0
-        try:
-            for ch in s:
-                x = x * radix + lookup[ch]
-        except KeyError:
-            bad = next(ch for ch in s if ch not in lookup)
-            raise AlphabetError(
-                f"character {bad!r} is not in the alphabet"
-            ) from None
-        return x
-
-    def _int_to_str(self, x: int, width: int) -> str:
-        """STR_radix(x, width): unfold an integer to a fixed-width numeral
-        string via the instance alphabet."""
-        radix = self._radix
-        alphabet = self._alphabet
-        out = []
-        for _ in range(width):
-            x, digit = divmod(x, radix)
-            out.append(alphabet[digit])
-        return "".join(reversed(out))
 
     # ------------------------------------------------------------------
     # FF1 core (SP 800-38G Algorithms 7 and 8)
@@ -361,15 +382,20 @@ class FF1:
 
         # S = first d bytes of R || AES(R xor [1]) || AES(R xor [2]) || ...
         # The extension blocks are mutually independent, so they are
-        # concatenated and encrypted in a single ECB call.
+        # concatenated and encrypted in as few ECB calls as the per-call
+        # size limit allows (a single call for any right half up to 2032
+        # bytes, i.e. every practical message).
         d = params.d
         if d <= 16:
             return r_int >> (8 * (16 - d))
         extra_blocks = -(-(d - 16) // 16)
-        buf = b"".join(
-            (r_int ^ j).to_bytes(16, "big") for j in range(1, extra_blocks + 1)
-        )
-        S = r_int.to_bytes(16, "big") + ecb_encrypt(buf)
+        parts = [r_int.to_bytes(16, "big")]
+        for start in range(1, extra_blocks + 1, _ECB_MAX_BLOCKS_PER_CALL):
+            stop = min(start + _ECB_MAX_BLOCKS_PER_CALL, extra_blocks + 1)
+            parts.append(ecb_encrypt(b"".join(
+                (r_int ^ j).to_bytes(16, "big") for j in range(start, stop)
+            )))
+        S = b"".join(parts)
         return int.from_bytes(S[:d], "big")
 
     def _encrypt_core(

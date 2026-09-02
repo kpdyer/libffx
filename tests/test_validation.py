@@ -111,3 +111,35 @@ class TestTweaks:
         assert cipher.encrypt("123456", tweak=bytearray(b"tw")) == cipher.encrypt(
             "123456", tweak=b"tw"
         )
+
+    def test_tweak_too_long_is_domain_error(self):
+        class Huge(bytes):
+            def __len__(self):
+                return 2**32
+
+        cipher = FF1(KEY, radix=10)
+        with pytest.raises(DomainError):
+            cipher.encrypt("123456", tweak=Huge())
+        with pytest.raises(DomainError):
+            cipher.encrypt_int(0, domain=10**6, tweak=Huge())
+
+
+class TestArgumentTypes:
+    """Wrong argument *types* raise TypeError, never an FFXError."""
+
+    @pytest.mark.parametrize("radix", ["10", 10.0, True, [10]])
+    def test_radix_must_be_int(self, radix):
+        with pytest.raises(TypeError):
+            FF1(KEY, radix=radix)
+
+    @pytest.mark.parametrize("alphabet", [b"0123456789", 36, ["a", "b"]])
+    def test_alphabet_must_be_str(self, alphabet):
+        with pytest.raises(TypeError):
+            FF1(KEY, alphabet=alphabet)
+
+
+class TestErrorHierarchy:
+    def test_validation_errors_are_ffxerror_and_valueerror(self):
+        for exc in (KeyLengthError, AlphabetError, DomainError):
+            assert issubclass(exc, FFXError)
+            assert issubclass(exc, ValueError)
