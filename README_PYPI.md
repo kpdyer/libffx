@@ -37,10 +37,18 @@ x = cipher.decrypt_int(y, domain=10**9)
 - `FF1(key, *, radix=None, alphabet=None, allow_small_domain=False)`:
   key must be 16/24/32 bytes; pass `radix` (2-36) or an explicit `alphabet`
   (2-65536 unique Unicode characters), or neither for integer-only use.
-- `encrypt(s, *, tweak=b"")` / `decrypt(s, *, tweak=b"")`: same-length
-  numeral strings over the same alphabet; tweaks are arbitrary bytes.
-- `encrypt_int(x, *, domain, tweak=b"")` / `decrypt_int(y, *, domain, tweak=b"")`
- : permute integers in `[0, domain)`; independent of the instance alphabet.
+  `allow_small_domain=True` lowers the minimum domain from 1,000,000 to 100.
+  Instances are safe to share between threads.
+- `encrypt(plaintext, *, tweak=b"")` / `decrypt(ciphertext, *, tweak=b"")`:
+  same-length numeral strings over the same alphabet; input is case- and
+  character-exact; the length `n` must satisfy `n >= 2` and
+  `radix**n >= 1_000_000` (or `>= 100`); tweaks are arbitrary bytes shorter
+  than 2**32.
+- `encrypt_int(x, *, domain, tweak=b"")` / `decrypt_int(y, *, domain, tweak=b"")`:
+  permute integers in `[0, domain)` with `domain >= 1_000_000` (or `>= 100`);
+  independent of the instance alphabet and stable across releases.
+- Errors: `KeyLengthError`, `AlphabetError`, and `DomainError` derive from
+  `FFXError` and `ValueError`; wrong argument types raise `TypeError`.
 
 ## Security notes
 
@@ -56,9 +64,16 @@ x = cipher.decrypt_int(y, domain=10**9)
 
 v1 implemented the FFX[radix] addendum profile, which is FF1 with a numeral
 string tweak. FF1 with the old tweak string encoded as ASCII bytes
-reproduces v1 FFX[radix] ciphertexts exactly (v1 rendered radix-36 strings
-in lowercase). The v1 wrapper classes, factory function, and big-integer
-dependency are gone.
+reproduces v1 FFX[radix] ciphertexts exactly, except that v1 treated any
+tweak whose numeric value was zero (`"0"`, `"0000000000"`, ...) as *no
+tweak*: decrypt those records with `tweak=b""`. v1 also accepted uppercase
+input for radix > 10 (lowercase it first) and had no minimum message length
+(v2 needs `radix**n >= 1_000_000`, or `>= 100` with
+`allow_small_domain=True`; shorter v1 data cannot be decrypted by v2).
+`ffx.new` / `FFXEncrypter` / `FFXInteger` became `FF1` with `str` and `int`
+arguments, `FFXException` / `InvalidRadixException` became `FFXError` /
+`AlphabetError`, and the AES backend is now `cryptography`. The GitHub
+README has the full migration table.
 
 ## Links
 

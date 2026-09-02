@@ -72,3 +72,27 @@ def test_legacy_decrypt(radix, tweak, plaintext, ciphertext):
     cipher = FF1(KEY, radix=radix)
     got = cipher.decrypt(normalize(ciphertext, radix), tweak=tweak)
     assert got == normalize(plaintext, radix)
+
+
+def test_v1_zero_valued_tweak_means_no_tweak():
+    """v1 treated any tweak whose numeric value was 0 as *no* tweak.
+
+    The v1 README's own radix-2 example (all-zero key, tweak "0" * 8,
+    plaintext "0" * 8) printed ciphertext "10100010"; FF1 reproduces it
+    only with an empty tweak, not with the zero string encoded as bytes.
+    """
+    cipher = FF1(bytes(16), radix=2, allow_small_domain=True)
+    assert cipher.encrypt("00000000") == "10100010"
+    assert cipher.encrypt("00000000", tweak=b"00000000") != "10100010"
+
+
+def test_v1_zero_valued_tweak_radix10():
+    """Vectors generated with libffx 1.0.3 (radix 10, the NIST AES-128 key):
+    the tweak strings "0000000000" and "0", and the integer tweak 0, all gave
+    "3662311239797070" for "4111111111111111", i.e. the no-tweak ciphertext;
+    the non-zero tweak string "0000000001" gave "9027324768307529", which its
+    ASCII encoding reproduces."""
+    cipher = FF1(bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c"), radix=10)
+    assert cipher.encrypt("4111111111111111") == "3662311239797070"
+    assert cipher.encrypt("4111111111111111", tweak=b"0000000000") != "3662311239797070"
+    assert cipher.encrypt("4111111111111111", tweak=b"0000000001") == "9027324768307529"

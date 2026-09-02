@@ -50,13 +50,17 @@ x = plain.decrypt_int(y, domain=10**9)
 FF1(key, *, radix=None, alphabet=None, allow_small_domain=False)
 ```
 
-- `key`: exactly 16, 24, or 32 bytes (AES-128/192/256); else `KeyLengthError`.
+- `key`: `bytes` (or `bytearray`) of exactly 16, 24, or 32 bytes
+  (AES-128/192/256); other lengths raise `KeyLengthError`.
 - `radix`: 2-36; the alphabet is `"0123456789abcdefghijklmnopqrstuvwxyz"[:radix]`.
 - `alphabet`: explicit alphabet string (2-65536 unique Unicode characters).
   At most one of `radix`/`alphabet` may be given. With neither, only the
   integer API is available.
 - `allow_small_domain`: relax the minimum domain from 1,000,000 (Draft
   SP 800-38G Rev 1) to 100 (original SP 800-38G).
+
+Instances hold no per-call state and are safe to share between threads;
+construct one per key and reuse it.
 
 #### `encrypt` / `decrypt`
 
@@ -71,8 +75,9 @@ outside the alphabet raise `AlphabetError`. The message length `n` must
 satisfy `n >= 2` and `radix**n >= 1_000_000` (or `>= 100` with
 `allow_small_domain=True`); otherwise `DomainError`.
 
-Tweaks are arbitrary bytes (`len < 2**32`) acting as public associated data:
-the same plaintext under different tweaks yields unrelated ciphertexts.
+Tweaks are arbitrary bytes (`len < 2**32`, else `DomainError`) acting as
+public associated data: the same plaintext under different tweaks yields
+unrelated ciphertexts.
 
 #### `encrypt_int` / `decrypt_int`
 
@@ -82,10 +87,19 @@ decrypt_int(y, *, domain, tweak=b"") -> int
 ```
 
 Encrypt an integer `0 <= x < domain` to another integer in the same range.
+`domain` must be at least 1,000,000 (100 with `allow_small_domain=True`);
+a smaller domain or an out-of-range value raises `DomainError`.
 Internally this runs FF1 at radix 2 over `(domain - 1).bit_length()` bits and
 cycle-walks until the result lands inside the domain. Results depend only on
 (key, domain, tweak), not on the instance's `radix`/`alphabet`, so the
 construction is stable across instances and releases.
+
+#### Errors
+
+`KeyLengthError`, `AlphabetError`, and `DomainError` all derive from
+`FFXError` and from `ValueError`, so `except FFXError` catches every
+validation failure. Arguments of the wrong type (a non-bytes key or tweak,
+a non-str message, a non-int radix, domain, or value) raise `TypeError`.
 
 ## Security notes
 
@@ -100,19 +114,46 @@ construction is stable across instances and releases.
 
 ## Migrating from v1 (FFX[radix])
 
-v1 implemented the FFX[radix] addendum profile, which is FF1 with the tweak
-taken as a numeral string instead of raw bytes. **FF1 with the old tweak
-string encoded as ASCII bytes reproduces v1 FFX[radix] ciphertexts
-exactly** (v1 rendered radix-36 strings in lowercase):
+v2 is a rewrite with a new API. v1 implemented the FFX[radix] addendum
+profile, which is FF1 with the tweak taken as a numeral string instead of
+raw bytes. **FF1 with the old tweak string encoded as ASCII bytes reproduces
+v1 FFX[radix] ciphertexts exactly**, with the zero-tweak exception below.
+`tests/test_legacy_compat.py` verifies every vector in
+[aes-ffx-vectors.txt](aes-ffx-vectors.txt) against the new API.
 
 ```python
 # v1 encrypted "0123456789" under the tweak string "9876543210"; in v2:
 FF1(key, radix=10).encrypt("0123456789", tweak=b"9876543210")  # '6124200773'
 ```
 
-The v1 wrapper classes and factory function are gone, along with the
-big-integer dependency. `tests/test_legacy_compat.py` verifies every vector in
-[aes-ffx-vectors.txt](aes-ffx-vectors.txt) against the new API.
+Behaviour changes to check before decrypting v1 data with v2:
+
+- **Zero-valued tweaks.** v1 treated any tweak whose numeric value was zero
+  (`"0"`, `"0000000000"`, the integer `0`, ...) as *no tweak*. Decrypt such
+  records with `tweak=b""` (the default), not with the zero string encoded
+  as bytes.
+- **Case.** v1 accepted uppercase input for radix > 10 and rendered output in
+  lowercase. v2 is case-exact and its radix-N alphabets are lowercase, so
+  lowercase v1 ciphertexts before passing them to v2.
+- **Minimum length.** v1 enforced no minimum. v2 requires `n >= 2` and
+  `radix**n >= 1_000_000` by default. Data with `100 <= radix**n < 1_000_000`
+  needs `allow_small_domain=True`; data with `radix**n < 100` (including
+  every one-numeral message) cannot be decrypted by v2 at all and must be
+  re-encrypted in a larger format with v1 before upgrading.
+- **Python 3.9** is no longer supported.
+
+API changes:
+
+| v1 | v2 |
+| --- | --- |
+| `ffx.new(key, radix)`, `FFXEncrypter` | `FF1(key, radix=...)` |
+| `enc.encrypt(tweak, FFXInteger)` / `enc.decrypt(tweak, FFXInteger)` | `cipher.encrypt(str, tweak=bytes)` / `cipher.decrypt(str, tweak=bytes)` |
+| `FFXInteger` | plain `str` for numeral strings; `int` with `encrypt_int` / `decrypt_int` |
+| `FFXException` | `FFXError` |
+| `InvalidRadixException` | `AlphabetError` |
+| `UnknownTypeException` | `TypeError` |
+| `long_to_bytes`, `bytes_to_long` | removed; use `int.to_bytes` / `int.from_bytes` |
+| `pycryptodome` dependency | `cryptography` |
 
 ## Testing and benchmarks
 
