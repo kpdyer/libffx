@@ -1,22 +1,11 @@
 #!/usr/bin/env python3
-"""Benchmark script for FF1 encryption/decryption performance.
+"""Time FF1 encryption and decryption, checking every round-trip.
 
-Two modes:
+Run a representative sweep with `python benchmark.py`, or select one case:
+    python benchmark.py --radix 10 --tweaksize 10 --messagesize 16 --seed 42
 
-* Sweep (default): time a set of representative (radix, message size)
-  configurations and print a comparison table.
-
-      python benchmark.py
-
-* Single config: pass --radix / --messagesize / --tweaksize to time one
-  configuration in detail.
-
-      python benchmark.py --radix 10 --tweaksize 10 --messagesize 16
-
-Each configuration is warmed up before timing (the first call to a given
-message/tweak length builds a small parameter cache), then every op is timed
-individually so we can report the median, min, and p95 latency alongside
-throughput. All results are validated with an encrypt/decrypt round-trip.
+Inputs are generated before timing. Warmup uses at most --iterations samples;
+--warmup 0 disables it. A seed reproduces keys and inputs, not measured timings.
 """
 
 import argparse
@@ -40,28 +29,21 @@ SWEEP_CONFIGS = [
 ]
 
 
-def _random_message(rng, radix, size):
-    """Random numeral string with `size` digits in the given radix."""
-    alphabet = BASE36[:radix]
-    return "".join(rng.choice(alphabet) for _ in range(size))
-
-
-def time_config(cipher, radix, tweaksize, messagesize, iterations, warmup):
+def time_config(cipher, radix, tweaksize, messagesize, iterations, warmup, *, rng):
     """Time one configuration.
 
     Returns a dict with encrypt/decrypt latency stats (microseconds) and
     throughput (ops/sec). Raises AssertionError if any round-trip fails.
     """
-    rng = random.Random()
-
     # Pre-generate inputs so timing excludes RNG / object construction.
+    alphabet = BASE36[:radix]
     samples = [
-        (rng.randbytes(tweaksize), _random_message(rng, radix, messagesize))
+        (rng.randbytes(tweaksize), "".join(rng.choice(alphabet) for _ in range(messagesize)))
         for _ in range(iterations)
     ]
 
     # Warmup: build the per-length parameter cache and prime the interpreter.
-    for tweak, msg in samples[: max(1, min(warmup, len(samples)))]:
+    for tweak, msg in samples[:warmup]:
         cipher.decrypt(cipher.encrypt(msg, tweak=tweak), tweak=tweak)
 
     enc_times, dec_times = [], []
@@ -107,32 +89,39 @@ def _print_row(label, radix, tweaksize, messagesize, result):
 def main():
     parser = argparse.ArgumentParser(description="Benchmark FF1 encryption/decryption")
     parser.add_argument("--radix", type=int, help="Radix for FF1 (2-36); single-config mode")
-    parser.add_argument("--tweaksize", type=int, default=8, help="Tweak size in bytes")
+    parser.add_argument("--tweaksize", type=int, help="Tweak size in bytes (default: 8); single-config mode")
     parser.add_argument("--messagesize", type=int, help="Message size in radix digits; single-config mode")
     parser.add_argument("--iterations", type=int, default=5000, help="Timed iterations per config")
     parser.add_argument("--warmup", type=int, default=200, help="Warmup iterations per config")
     parser.add_argument("--seed", type=int, default=None, help="RNG seed for reproducibility")
     args = parser.parse_args()
 
-    if args.seed is not None:
-        random.seed(args.seed)
+    if args.iterations <= 0:
+        parser.error("--iterations must be positive")
+    if args.warmup < 0:
+        parser.error("--warmup must be nonnegative")
+    if args.tweaksize is not None and args.tweaksize < 0:
+        parser.error("--tweaksize must be nonnegative")
 
-    # Random 128-bit key.
-    key = random.getrandbits(128).to_bytes(16, "big")
+    rng = random.Random(args.seed)
+    key = rng.getrandbits(128).to_bytes(16, "big")
     print(f"KEY=0x{key.hex()}  iterations={args.iterations}  warmup={args.warmup}")
     print("-" * 100)
 
-    single = args.radix is not None or args.messagesize is not None
+    single = any(value is not None for value in (args.radix, args.messagesize, args.tweaksize))
     if single:
         radix = args.radix if args.radix is not None else 10
         messagesize = args.messagesize if args.messagesize is not None else 16
-        configs = [(radix, args.tweaksize, messagesize, f"radix{radix}")]
+        tweaksize = args.tweaksize if args.tweaksize is not None else 8
+        configs = [(radix, tweaksize, messagesize, f"radix{radix}")]
     else:
         configs = SWEEP_CONFIGS
 
     for radix, tweaksize, messagesize, label in configs:
         cipher = FF1(key, radix=radix, allow_small_domain=True)
-        result = time_config(cipher, radix, tweaksize, messagesize, args.iterations, args.warmup)
+        result = time_config(
+            cipher, radix, tweaksize, messagesize, args.iterations, args.warmup, rng=rng
+        )
         _print_row(label, radix, tweaksize, messagesize, result)
 
 

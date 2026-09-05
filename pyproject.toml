@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libffx"
-version = "2.0.1"
+dynamic = ["version"]
 description = "FF1 format-preserving encryption (NIST SP 800-38G)"
-readme = "README_PYPI.md"
+readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -48,11 +48,11 @@ Issues = "https://github.com/kpdyer/libffx/issues"
 [tool.setuptools.packages.find]
 include = ["ffx*"]
 
+[tool.setuptools.dynamic]
+version = {attr = "ffx.__version__"}
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -63,10 +63,3 @@ ignore_missing_imports = true
 [tool.coverage.run]
 source = ["ffx"]
 branch = true
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "if __name__ == .__main__.:",
-    "raise NotImplementedError",
-]
