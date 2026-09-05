@@ -1,4 +1,4 @@
-include README.md
+include MIGRATING.md
 include SECURITY.md
 include aes-ffx-vectors.txt
 include example.py

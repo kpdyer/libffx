@@ -5,174 +5,117 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A pure-Python implementation of **NIST SP 800-38G FF1** format-preserving
-encryption (FPE), with AES-128/192/256.
-
-Format-preserving encryption encrypts data while preserving its format: a
-16-digit credit card number encrypts to another 16-digit number, and a DNA
-string over `ACGT` encrypts to another DNA string of the same length.
+A Python implementation of [NIST SP 800-38G FF1](https://csrc.nist.gov/publications/detail/sp/800-38g/final)
+format-preserving encryption, using AES-128/192/256 through `cryptography`.
+It maps strings to strings of the same length and alphabet, or integers to
+integers in the same range. Python 3.10+.
 
 ## Installation
 
 ```bash
-pip install libffx
+python -m pip install libffx
 ```
 
-The only dependency is `cryptography` (OpenSSL-backed AES). Python 3.10+.
-
-## Quick Start
+## Quick start
 
 ```python
+import secrets
 from ffx import FF1
 
-key = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")  # 16, 24, or 32 bytes
+key = secrets.token_bytes(16)  # 16, 24, or 32 bytes
 
-# Numeral strings (radix 2-36, or any custom alphabet)
+# Decimal strings
 cipher = FF1(key, radix=10)
-ciphertext = cipher.encrypt("4111111111111111", tweak=b"account-42")
-plaintext = cipher.decrypt(ciphertext, tweak=b"account-42")
+encrypted = cipher.encrypt("0123456789", tweak=b"record-42")
+assert cipher.decrypt(encrypted, tweak=b"record-42") == "0123456789"
 
-# Custom alphabets (any unique Unicode characters, up to 65536)
-dna = FF1(key, alphabet="ACGT")
-encrypted = dna.encrypt("ACGTACGTACGT")
+# Custom alphabets
+cipher = FF1(key, alphabet="ACGT")
+encrypted = cipher.encrypt("ACGTACGTACGT")
+assert cipher.decrypt(encrypted) == "ACGTACGTACGT"
 
-# Integers in an arbitrary domain [0, N)
-plain = FF1(key)  # no alphabet needed for the integer API
-y = plain.encrypt_int(123456789, domain=10**9)
-x = plain.decrypt_int(y, domain=10**9)
+# Integers in [0, domain)
+cipher = FF1(key)
+encrypted = cipher.encrypt_int(123456789, domain=10**9)
+assert cipher.decrypt_int(encrypted, domain=10**9) == 123456789
 ```
 
 ## API
-
-#### `FF1`
 
 ```python
 FF1(key, *, radix=None, alphabet=None, allow_small_domain=False)
 ```
 
-- `key`: `bytes` (or `bytearray`) of exactly 16, 24, or 32 bytes
-  (AES-128/192/256); other lengths raise `KeyLengthError`.
-- `radix`: 2-36; the alphabet is `"0123456789abcdefghijklmnopqrstuvwxyz"[:radix]`.
-- `alphabet`: explicit alphabet string (2-65536 unique Unicode characters).
-  At most one of `radix`/`alphabet` may be given. With neither, only the
-  integer API is available.
-- `allow_small_domain`: relax the minimum domain from 1,000,000 (Draft
-  SP 800-38G Rev 1) to 100 (original SP 800-38G).
+- `key`: bytes or bytearray of exactly 16, 24, or 32 bytes.
+- `radix`: 2–36, using `"0123456789abcdefghijklmnopqrstuvwxyz"[:radix]`.
+- `alphabet`: 2–65,536 unique Unicode characters. Supply at most one of
+  `radix` and `alphabet`; omit both for an integer-only instance.
+- `allow_small_domain`: lower the minimum domain size from 1,000,000
+  (Draft SP 800-38G Rev 1) to 100 (original SP 800-38G).
 
-Instances hold no per-call state and are safe to share between threads;
-construct one per key and reuse it.
-
-#### `encrypt` / `decrypt`
+Reuse one instance per key; instances may be shared between threads.
 
 ```python
-encrypt(plaintext, *, tweak=b"") -> str
-decrypt(ciphertext, *, tweak=b"") -> str
+cipher.encrypt(plaintext, *, tweak=b"") -> str
+cipher.decrypt(ciphertext, *, tweak=b"") -> str
+cipher.encrypt_int(x, *, domain, tweak=b"") -> int
+cipher.decrypt_int(y, *, domain, tweak=b"") -> int
 ```
 
-Encrypt/decrypt a numeral string. Output has the same length over the same
-alphabet. Input is case- and character-exact (no normalization); characters
-outside the alphabet raise `AlphabetError`. The message length `n` must
-satisfy `n >= 2` and `radix**n >= 1_000_000` (or `>= 100` with
-`allow_small_domain=True`); otherwise `DomainError`.
+**Strings** retain their length and use the configured alphabet exactly.
+There is no case conversion or normalization. A length `n` must satisfy
+`n >= 2` and `radix**n >= minimum`. At the default minimum, decimal strings
+need six characters and base-36 strings need four.
 
-Tweaks are arbitrary bytes (`len < 2**32`, else `DomainError`) acting as
-public associated data: the same plaintext under different tweaks yields
-unrelated ciphertexts.
+**Integers** require `domain >= minimum` and `0 <= value < domain`. The
+construction uses radix-2 FF1 over `(domain - 1).bit_length()` bits and cycle
+walking. Its results are independent of the instance's string alphabet;
+this construction is kept stable across releases.
 
-#### `encrypt_int` / `decrypt_int`
+**Tweaks** are public context, supplied as bytes or bytearray shorter than
+`2**32` bytes. Use the same tweak to decrypt, and different tweaks to separate
+contexts.
 
-```python
-encrypt_int(x, *, domain, tweak=b"") -> int
-decrypt_int(y, *, domain, tweak=b"") -> int
-```
-
-Encrypt an integer `0 <= x < domain` to another integer in the same range.
-`domain` must be at least 1,000,000 (100 with `allow_small_domain=True`);
-a smaller domain or an out-of-range value raises `DomainError`.
-Internally this runs FF1 at radix 2 over `(domain - 1).bit_length()` bits and
-cycle-walks until the result lands inside the domain. Results depend only on
-(key, domain, tweak), not on the instance's `radix`/`alphabet`, so the
-construction is stable across instances and releases.
-
-#### Errors
-
-`KeyLengthError`, `AlphabetError`, and `DomainError` all derive from
-`FFXError` and from `ValueError`, so `except FFXError` catches every
-validation failure. Arguments of the wrong type (a non-bytes key or tweak,
-a non-str message, a non-int radix, domain, or value) raise `TypeError`.
+**Errors:** `KeyLengthError`, `AlphabetError`, and `DomainError` inherit
+from both `FFXError` and `ValueError`. Wrong argument types raise `TypeError`.
 
 ## Security notes
 
-- **Deterministic**: FF1 is a deterministic permutation. Equal plaintexts
-  under the same key and tweak produce equal ciphertexts. Use tweaks
-  (e.g. a record identifier) to prevent cross-record equality leakage.
-- **Domain minimums**: small domains are fundamentally weak for FPE. The
-  default floor of 1,000,000 follows Draft SP 800-38G Rev 1;
-  `allow_small_domain=True` opts into the original floor of 100; use it
-  only when you understand the risk.
-- Always use cryptographically random keys (e.g. `secrets.token_bytes(16)`).
+- Equal plaintexts under the same key and tweak produce equal ciphertexts.
+  Use a record identifier as a tweak to avoid cross-record equality leakage.
+- Small domains are inherently weak. Enable `allow_small_domain` only when
+  you understand the risk and need the lower minimum.
+- Generate keys with a cryptographically secure source such as
+  `secrets.token_bytes`, as shown above.
 
-## Migrating from v1 (FFX[radix])
+## Examples and migration
 
-v2 is a rewrite with a new API. v1 implemented the FFX[radix] addendum
-profile, which is FF1 with the tweak taken as a numeral string instead of
-raw bytes. **FF1 with the old tweak string encoded as ASCII bytes reproduces
-v1 FFX[radix] ciphertexts exactly**, with the zero-tweak exception below.
-`tests/test_legacy_compat.py` verifies every vector in
-[aes-ffx-vectors.txt](aes-ffx-vectors.txt) against the new API.
+- [Formatted strings](https://github.com/kpdyer/libffx/blob/master/examples/formatted_strings.py):
+  encrypt digits or alphanumeric characters together, preserving separators
+  and explicitly selected prefixes. Preserving shape does not enforce check
+  digits, calendar validity, or letter/digit positions.
+- [IP addresses](https://github.com/kpdyer/libffx/blob/master/examples/ip_address.py):
+  use the integer API to preserve valid IPv4 and IPv6 representations.
+- [Migrating from v1](https://github.com/kpdyer/libffx/blob/master/MIGRATING.md):
+  API changes and compatibility rules for existing ciphertexts.
 
-```python
-# v1 encrypted "0123456789" under the tweak string "9876543210"; in v2:
-FF1(key, radix=10).encrypt("0123456789", tweak=b"9876543210")  # '6124200773'
-```
+## Development
 
-Behaviour changes to check before decrypting v1 data with v2:
-
-- **Zero-valued tweaks.** v1 treated any tweak whose numeric value was zero
-  (`"0"`, `"0000000000"`, the integer `0`, ...) as *no tweak*. Decrypt such
-  records with `tweak=b""` (the default), not with the zero string encoded
-  as bytes.
-- **Case.** v1 accepted uppercase input for radix > 10 and rendered output in
-  lowercase. v2 is case-exact and its radix-N alphabets are lowercase, so
-  lowercase v1 ciphertexts before passing them to v2.
-- **Minimum length.** v1 enforced no minimum. v2 requires `n >= 2` and
-  `radix**n >= 1_000_000` by default. Data with `100 <= radix**n < 1_000_000`
-  needs `allow_small_domain=True`; data with `radix**n < 100` (including
-  every one-numeral message) cannot be decrypted by v2 at all and must be
-  re-encrypted in a larger format with v1 before upgrading.
-- **Python 3.9** is no longer supported.
-
-API changes:
-
-| v1 | v2 |
-| --- | --- |
-| `ffx.new(key, radix)`, `FFXEncrypter` | `FF1(key, radix=...)` |
-| `enc.encrypt(tweak, FFXInteger)` / `enc.decrypt(tweak, FFXInteger)` | `cipher.encrypt(str, tweak=bytes)` / `cipher.decrypt(str, tweak=bytes)` |
-| `FFXInteger` | plain `str` for numeral strings; `int` with `encrypt_int` / `decrypt_int` |
-| `FFXException` | `FFXError` |
-| `InvalidRadixException` | `AlphabetError` |
-| `UnknownTypeException` | `TypeError` |
-| `long_to_bytes`, `bytes_to_long` | removed; use `int.to_bytes` / `int.from_bytes` |
-| `pycryptodome` dependency | `cryptography` |
-
-## Testing and benchmarks
+From a checkout, in a virtual environment:
 
 ```bash
-pytest              # NIST FF1 sample vectors, v1 compat vectors, sweeps
-python benchmark.py # performance sweep across radices and sizes
+python -m pip install -e ".[dev]"
+python -m pytest --cov=ffx --cov-report=term-missing
+python -m mypy ffx
+python example.py
+python -m examples.formatted_strings
+python -m examples.ip_address
+python benchmark.py
 ```
 
-Test vectors:
+Tests cover the official NIST FF1 samples (AES-128/192/256), legacy
+FFX[radix] vectors, input validation, integer domains, and shared instances.
+See `python benchmark.py --help` for timing options.
 
-- Official NIST FF1 samples (AES-128/192/256) from the SP 800-38G
-  intermediate-values document: `tests/test_nist_vectors.py`
-- Legacy Voltage Security FFX[radix] vectors: `aes-ffx-vectors.txt`,
-  verified via `tests/test_legacy_compat.py`
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file.
-
-## Author
-
-Kevin P. Dyer (kpdyer@gmail.com)
+[MIT license](https://github.com/kpdyer/libffx/blob/master/LICENSE) ·
+[Report a vulnerability](https://github.com/kpdyer/libffx/blob/master/SECURITY.md)

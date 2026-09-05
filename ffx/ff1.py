@@ -85,8 +85,8 @@ class _Numerals(NamedTuple):
         try:
             for ch in s:
                 x = x * radix + lookup[ch]
-        except KeyError:
-            bad = next(ch for ch in s if ch not in lookup)
+        except KeyError as exc:
+            bad = exc.args[0]
             raise AlphabetError(
                 f"character {bad!r} is not in the alphabet"
             ) from None
@@ -183,12 +183,10 @@ class FF1:
             if alphabet is not None
             else None
         )
-        self._allow_small_domain = bool(allow_small_domain)
         self._min_domain = (
             _MIN_DOMAIN_SMALL if allow_small_domain else _MIN_DOMAIN
         )
 
-        self._key = key
         # ECB here is the raw single-block AES primitive, which SP 800-38G
         # builds FF1 from (the CBC-MAC chain in _F and the S-extension
         # blocks are each one-block CIPH_K calls). No multi-block data is

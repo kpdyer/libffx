@@ -16,18 +16,20 @@ def main():
 
     ciphertext = cipher.encrypt(plaintext, tweak=tweak)
     decrypted = cipher.decrypt(ciphertext, tweak=tweak)
+    assert decrypted == plaintext
 
     print(f"Plaintext:  {plaintext}")
     print(f"Ciphertext: {ciphertext}")
     print(f"Decrypted:  {decrypted}")
-    print(f"Roundtrip successful: {plaintext == decrypted}")
 
     # Integers in an arbitrary domain [0, N).
     n = 123_456_789
     encrypted = cipher.encrypt_int(n, domain=10**9, tweak=tweak)
+    decrypted_int = cipher.decrypt_int(encrypted, domain=10**9, tweak=tweak)
+    assert decrypted_int == n
     print(f"\nInteger:    {n}")
     print(f"Encrypted:  {encrypted}")
-    print(f"Decrypted:  {cipher.decrypt_int(encrypted, domain=10**9, tweak=tweak)}")
+    print(f"Decrypted:  {decrypted_int}")
 
 
 if __name__ == "__main__":

@@ -28,13 +28,18 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install -e ".[dev]"
 
       - name: Run tests
-        run: pytest -v
+        run: >-
+          python -m pytest -v
+          ${{ matrix.python-version == '3.12' && '--cov=ffx --cov-report=term-missing' || '' }}
 
       - name: Type-check
-        run: mypy ffx
+        run: python -m mypy ffx
 
-      - name: Run example
-        run: python example.py
+      - name: Run examples
+        run: |
+          python example.py
+          python -m examples.formatted_strings
+          python -m examples.ip_address
