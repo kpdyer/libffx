@@ -29,6 +29,9 @@ Behaviour changes to check before decrypting v1 data with v2:
   needs `allow_small_domain=True`; data with `radix**n < 100` (including
   every one-numeral message) cannot be decrypted by v2 at all and must be
   re-encrypted in a larger format with v1 before upgrading.
+- **Maximum length.** v1 enforced no maximum. v2 caps the message length at
+  `8192` numeral characters and integer domains at `2**8192`; longer inputs
+  raise `DomainError`.
 - **Python 3.9** is no longer supported.
 
 API changes:

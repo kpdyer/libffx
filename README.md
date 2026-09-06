@@ -64,12 +64,12 @@ cipher.decrypt_int(y, *, domain, tweak=b"") -> int
 
 **Strings** retain their length and use the configured alphabet exactly.
 There is no case conversion or normalization. A length `n` must satisfy
-`n >= 2` and `radix**n >= minimum`. At the default minimum, decimal strings
-need six characters and base-36 strings need four.
+`2 <= n <= 8192` and `radix**n >= minimum`. At the default minimum, decimal
+strings need six characters and base-36 strings need four.
 
-**Integers** require `domain >= minimum` and `0 <= value < domain`. The
-construction uses radix-2 FF1 over `(domain - 1).bit_length()` bits and cycle
-walking. Its results are independent of the instance's string alphabet;
+**Integers** require `minimum <= domain <= 2**8192` and `0 <= value < domain`.
+The construction uses radix-2 FF1 over `(domain - 1).bit_length()` bits and
+cycle walking. Its results are independent of the instance's string alphabet;
 this construction is kept stable across releases.
 
 **Tweaks** are public context, supplied as bytes or bytearray shorter than

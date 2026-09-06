@@ -41,6 +41,15 @@ _MAX_ALPHABET = 65536
 
 _MAX_TWEAK_BYTES = 2 ** 32  # exclusive: len(tweak) must be < 2**32
 
+#: Maximum message length (numeral characters) for the string API and
+#: maximum Feistel-state bit length for the integer API. SP 800-38G sets
+#: no maximum, but the NUM/STR folding is quadratic in n, so without a
+#: cap a caller-supplied long message can burn unbounded CPU in one call
+#: (tens of seconds for a 512 KiB input). 8192 numerals keeps the worst
+#: case under a fraction of a second while covering every practical
+#: format-preserving use.
+_MAX_MESSAGE_LEN = 2 ** 13
+
 #: Largest number of AES blocks handed to the shared ECB context in one
 #: update() call. cryptography releases the GIL while encrypting a buffer
 #: of 2048 bytes or more, and its CipherContext stays exclusively borrowed
@@ -118,6 +127,9 @@ class FF1:
             (Draft SP 800-38G Rev 1) to 100 (original SP 800-38G).
 
     Instances keep no per-call state and may be shared between threads.
+
+    Messages are limited to 8192 numerals and integer domains to
+    ``2**8192``; larger values raise :class:`DomainError`.
 
     Example:
         >>> cipher = FF1(bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c"),
@@ -232,6 +244,11 @@ class FF1:
 
         radix = numerals.radix
         n = len(message)
+        if n > _MAX_MESSAGE_LEN:
+            raise DomainError(
+                f"message of length {n} exceeds the maximum supported "
+                f"length of {_MAX_MESSAGE_LEN} numerals"
+            )
         if n < 2 or radix ** n < self._min_domain:
             raise DomainError(
                 f"message of length {n} over radix {radix} gives a domain "
@@ -296,7 +313,13 @@ class FF1:
             raise TypeError(f"value must be an int, got {type(x).__name__}")
         if not 0 <= x < domain:
             raise DomainError(f"value {x} is outside [0, {domain})")
-        return (domain - 1).bit_length()
+        n = (domain - 1).bit_length()
+        if n > _MAX_MESSAGE_LEN:
+            raise DomainError(
+                f"domain of {n} bits exceeds the maximum supported "
+                f"domain of 2**{_MAX_MESSAGE_LEN}"
+            )
+        return n
 
     # ------------------------------------------------------------------
     # Shared validation
