@@ -75,6 +75,30 @@ class TestAlphabetConfig:
             cipher.encrypt(123456789)
 
 
+class TestMaximumSize:
+    def test_string_at_limit(self):
+        cipher = FF1(KEY, radix=2)
+        message = "01" * (8192 // 2)
+        assert cipher.decrypt(cipher.encrypt(message)) == message
+
+    @pytest.mark.parametrize("radix", [2, 10, 36])
+    def test_string_over_limit(self, radix):
+        cipher = FF1(KEY, radix=radix)
+        with pytest.raises(DomainError, match="maximum"):
+            cipher.encrypt("0" * 8193)
+
+    def test_integer_at_limit(self):
+        cipher = FF1(KEY)
+        domain = 2**8192
+        y = cipher.encrypt_int(0, domain=domain)
+        assert cipher.decrypt_int(y, domain=domain) == 0
+
+    def test_integer_over_limit(self):
+        cipher = FF1(KEY)
+        with pytest.raises(DomainError, match="maximum"):
+            cipher.encrypt_int(0, domain=2**8192 + 1)
+
+
 class TestDomainGating:
     def test_below_default_floor(self):
         cipher = FF1(KEY, radix=10)
