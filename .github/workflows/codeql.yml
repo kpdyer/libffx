@@ -30,11 +30,33 @@ jobs:
         with:
           languages: python
           queries: security-extended
+          # Marks a result as suppressed when the line directly above it has a
+          # `# codeql[<rule-id>] <justification>` comment.
+          packs: codeql/python-queries:AlertSuppression.ql
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd  # v4.38.1
         with:
           category: "/language:python"
+          output: sarif-results
+          # Uploaded below, once suppressed results are removed.
+          upload: failure-only
+
+      # Code scanning ignores SARIF suppressions, so suppressed results are
+      # dropped before upload. That keeps them out of PR checks as well as the
+      # default branch, and the justification stays next to the code. Only the
+      # rules named here can be suppressed: CodeQL also treats a bare `# noqa`
+      # or `# lgtm` comment as suppressing every alert on its line.
+      - name: Drop suppressed results
+        run: >-
+          jq '.runs[].results |= map(select((.suppressions // []) == []
+          or (.ruleId | IN("py/weak-cryptographic-algorithm") | not)))'
+          sarif-results/python.sarif > python.sarif
+
+      - name: Upload CodeQL results
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd  # v4.38.1
+        with:
+          sarif_file: python.sarif
 
   analyze-actions:
     name: Analyze (Actions)

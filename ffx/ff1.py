@@ -393,6 +393,7 @@ class FF1:
             + n.to_bytes(4, "big")
             + t.to_bytes(4, "big")
         )
+        # codeql[py/weak-cryptographic-algorithm] One-block CIPH_K; see FF1.__init__.
         e_p = int.from_bytes(self._ecb_encrypt(P), "big")
 
         params = _FParams(
@@ -417,6 +418,7 @@ class FF1:
         r_int = 0
         for off in range(0, len(data), 16):
             blk = int.from_bytes(data[off:off + 16], "big") ^ r_int
+            # codeql[py/weak-cryptographic-algorithm] One-block CIPH_K; see FF1.__init__.
             r_int = int.from_bytes(self._ecb_encrypt(blk.to_bytes(16, "big")), "big")
         return r_int
 
