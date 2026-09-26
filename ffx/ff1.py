@@ -393,6 +393,7 @@ class FF1:
             + n.to_bytes(4, "big")
             + t.to_bytes(4, "big")
         )
+        # codeql[py/weak-cryptographic-algorithm] One-block CIPH_K; see FF1.__init__.
         e_p = int.from_bytes(self._ecb_encrypt(P), "big")
 
         params = _FParams(
@@ -417,6 +418,7 @@ class FF1:
         r_int = 0
         for off in range(0, len(data), 16):
             blk = int.from_bytes(data[off:off + 16], "big") ^ r_int
+            # codeql[py/weak-cryptographic-algorithm] One-block CIPH_K; see FF1.__init__.
             r_int = int.from_bytes(self._ecb_encrypt(blk.to_bytes(16, "big")), "big")
         return r_int
 
@@ -452,6 +454,7 @@ class FF1:
         def F(i: int, b: int) -> int:
             x = base ^ (i << i_shift) ^ b
             if tail == 1:
+                # codeql[py/weak-cryptographic-algorithm] One-block CIPH_K; see __init__.
                 r_int = int.from_bytes(ecb_encrypt(x.to_bytes(16, "big")), "big")
             else:
                 r_int = cbc_mac(x, tail)
@@ -467,6 +470,7 @@ class FF1:
             parts = [r_int.to_bytes(16, "big")]
             for start in range(1, extra_blocks + 1, _ECB_MAX_BLOCKS_PER_CALL):
                 stop = min(start + _ECB_MAX_BLOCKS_PER_CALL, extra_blocks + 1)
+                # codeql[py/weak-cryptographic-algorithm] Independent S-extension blocks.
                 parts.append(ecb_encrypt(b"".join(
                     (r_int ^ j).to_bytes(16, "big") for j in range(start, stop)
                 )))
