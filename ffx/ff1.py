@@ -17,6 +17,7 @@ is a wire contract; do not change it.
 from __future__ import annotations
 
 import string
+from collections.abc import Callable
 from typing import NamedTuple
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -26,6 +27,9 @@ from .exceptions import AlphabetError, DomainError, KeyLengthError
 #: Default numerals for radix-N instances (radix 2..36), per the FFX
 #: convention: digits then lowercase letters.
 _BASE36_ALPHABET = string.digits + string.ascii_lowercase
+
+#: format() specs that render the radix-N alphabets they are keyed by.
+_FORMAT_SPECS = {2: "b", 8: "o", 10: "d", 16: "x"}
 
 _NUM_ROUNDS = 10
 
@@ -43,12 +47,18 @@ _MAX_TWEAK_BYTES = 2 ** 32  # exclusive: len(tweak) must be < 2**32
 
 #: Maximum message length (numeral characters) for the string API and
 #: maximum Feistel-state bit length for the integer API. SP 800-38G sets
-#: no maximum, but the NUM/STR folding is quadratic in n, so without a
-#: cap a caller-supplied long message can burn unbounded CPU in one call
-#: (tens of seconds for a 512 KiB input). 8192 numerals keeps the worst
+#: no maximum, but the NUM/STR conversions are superlinear in n, so without
+#: a cap a caller-supplied long message can burn unbounded CPU in one call
+#: (seconds for a 512 KiB input). 8192 numerals keeps the worst
 #: case under a fraction of a second while covering every practical
 #: format-preserving use.
 _MAX_MESSAGE_LEN = 2 ** 13
+
+#: Numeral strings longer than this are converted half by half, which is
+#: much faster than one numeral at a time. It is also well under 640, the
+#: lowest limit sys.set_int_max_str_digits() accepts, so int() and format()
+#: never hit that limit.
+_SPLIT_LEN = 64
 
 #: Largest number of AES blocks handed to the shared ECB context in one
 #: update() call. cryptography releases the GIL while encrypting a buffer
@@ -68,7 +78,6 @@ class _FParams(NamedTuple):
     distinct (radix, n, t) and reused across rounds and calls.
     """
 
-    P: bytes          # fixed 16-byte header block
     e_p: int          # AES(P) as an int: the CBC-MAC chain value after block P
     b_bytes: int      # width, in bytes, of the NUM(B) field appended to Q
     d: int            # number of S bytes consumed before reduction (SP 800-38G d)
@@ -85,9 +94,18 @@ class _Numerals(NamedTuple):
     alphabet: str
     radix: int
     char_to_digit: dict[str, int]
+    format_spec: str | None  # for radix 2, 8, 10, 16: format() and int() handle it
 
     def to_int(self, s: str) -> int:
         """NUM_radix(s): fold a numeral string to an integer."""
+        if len(s) > _SPLIT_LEN:
+            k = len(s) // 2
+            scale: int = self.radix ** k
+            return self.to_int(s[:-k]) * scale + self.to_int(s[-k:])
+        # Only alphabet characters survive strip(), so int() never sees the
+        # signs, spaces, underscores, or uppercase it would also accept.
+        if self.format_spec and not s.strip(self.alphabet):
+            return int(s, self.radix)
         radix = self.radix
         lookup = self.char_to_digit
         x = 0
@@ -104,6 +122,12 @@ class _Numerals(NamedTuple):
     def to_str(self, x: int, width: int) -> str:
         """STR_radix(x, width): unfold an integer to a fixed-width numeral
         string."""
+        if width > _SPLIT_LEN:
+            k = width // 2
+            high, low = divmod(x, self.radix ** k)
+            return self.to_str(high, width - k) + self.to_str(low, k)
+        if self.format_spec is not None:
+            return format(x, self.format_spec).zfill(width)
         radix = self.radix
         alphabet = self.alphabet
         out: list[str] = []
@@ -190,8 +214,14 @@ class FF1:
             if len(set(alphabet)) != len(alphabet):
                 raise AlphabetError("alphabet characters must be unique")
 
+        format_spec = _FORMAT_SPECS.get(radix) if radix is not None else None
         self._numerals = (
-            _Numerals(alphabet, len(alphabet), {c: i for i, c in enumerate(alphabet)})
+            _Numerals(
+                alphabet,
+                len(alphabet),
+                {c: i for i, c in enumerate(alphabet)},
+                format_spec,
+            )
             if alphabet is not None
             else None
         )
@@ -200,7 +230,7 @@ class FF1:
         )
 
         # ECB here is the raw single-block AES primitive, which SP 800-38G
-        # builds FF1 from (the CBC-MAC chain in _F and the S-extension
+        # builds FF1 from (the CBC-MAC chain in F and the S-extension
         # blocks are each one-block CIPH_K calls). No multi-block data is
         # ever encrypted in ECB mode. The encryptor context is persistent:
         # ECB has no chaining state, so update() calls encrypt each aligned
@@ -366,7 +396,6 @@ class FF1:
         e_p = int.from_bytes(self._ecb_encrypt(P), "big")
 
         params = _FParams(
-            P=P,
             e_p=e_p,
             b_bytes=b_bytes,
             d=d,
@@ -379,55 +408,82 @@ class FF1:
         self._param_cache[cache_key] = params
         return params
 
-    def _F(self, params: _FParams, q_prefix: bytes, i: int, b_int: int) -> int:
-        """The FF1 round function: y = NUM(S) for round i and right half
-        NUM(B) = b_int (not yet reduced modulo radix**m)."""
-        # Q = tweak || zero pad || [i] || NUM(B) as b bytes.
-        Q = q_prefix + bytes((i,)) + b_int.to_bytes(params.b_bytes, "big")
+    def _cbc_mac(self, x: int, blocks: int) -> int:
+        """The final block of the zero-IV AES-CBC-MAC over x encoded as
+        ``blocks`` big-endian 16-byte blocks."""
+        data = x.to_bytes(16 * blocks, "big")
+        if blocks > self._MAC_INLINE_MAX_BLOCKS:
+            return int.from_bytes(self._cbc_cipher.encryptor().update(data)[-16:], "big")
+        r_int = 0
+        for off in range(0, len(data), 16):
+            blk = int.from_bytes(data[off:off + 16], "big") ^ r_int
+            r_int = int.from_bytes(self._ecb_encrypt(blk.to_bytes(16, "big")), "big")
+        return r_int
 
-        # R = CBC-MAC_K(P || Q) with a zero IV; only the final block is
-        # needed. P is a single block whose image AES(P) is cached, so the
-        # chain starts from it and folds in the Q blocks. For short
-        # payloads, folding through the persistent ECB context avoids
-        # creating a fresh CBC context (and its key schedule) every round;
-        # for long payloads the C CBC path wins.
-        ecb_encrypt = self._ecb_encrypt
-        if (len(Q) >> 4) + 1 <= self._MAC_INLINE_MAX_BLOCKS:
-            r_int = params.e_p
-            for off in range(0, len(Q), 16):
-                blk = int.from_bytes(Q[off:off + 16], "big") ^ r_int
-                r_int = int.from_bytes(ecb_encrypt(blk.to_bytes(16, "big")), "big")
-        else:
-            cbc = self._cbc_cipher.encryptor()
-            r_int = int.from_bytes(cbc.update(params.P + Q)[-16:], "big")
-
-        # S = first d bytes of R || AES(R xor [1]) || AES(R xor [2]) || ...
-        # The extension blocks are mutually independent, so they are
-        # concatenated and encrypted in as few ECB calls as the per-call
-        # size limit allows (a single call for any right half up to 2032
-        # bytes, i.e. every practical message).
+    def _round_function(
+        self, params: _FParams, tweak: bytes
+    ) -> Callable[[int, int], int]:
+        """Return the FF1 round function for one call: F(i, NUM(B)) = y =
+        NUM(S) for round i (not yet reduced modulo radix**m)."""
+        # R = CBC-MAC_K(P || Q) with a zero IV, where
+        # Q = tweak || zero pad || [i] || NUM(B) as b bytes. The chain value
+        # after P is cached as AES(P), and the leading blocks of Q, which
+        # hold only tweak bytes and padding, are folded in once per call.
+        pad, b_bytes = params.q_zero_pad, params.b_bytes
+        fixed = (len(tweak) + pad) // 16
+        tail = (len(tweak) + pad + 1 + b_bytes) // 16 - fixed
+        chain = params.e_p
+        if fixed:
+            prefix = tweak[:16 * fixed].ljust(16 * fixed, b"\x00")
+            chain = self._cbc_mac(
+                (chain << (128 * (fixed - 1))) ^ int.from_bytes(prefix, "big"), fixed
+            )
+        # The remaining blocks of Q, as one integer with the chain value
+        # XORed into the first, are base ^ [i] ^ NUM(B): the rest of the
+        # tweak, [i], and NUM(B) occupy disjoint bits.
+        base = (
+            int.from_bytes(tweak[16 * fixed:], "big") << (8 * (pad + 1 + b_bytes))
+        ) ^ (chain << (128 * (tail - 1)))
+        i_shift = 8 * b_bytes
         d = params.d
-        if d <= 16:
-            return r_int >> (8 * (16 - d))
-        extra_blocks = -(-(d - 16) // 16)
-        parts = [r_int.to_bytes(16, "big")]
-        for start in range(1, extra_blocks + 1, _ECB_MAX_BLOCKS_PER_CALL):
-            stop = min(start + _ECB_MAX_BLOCKS_PER_CALL, extra_blocks + 1)
-            parts.append(ecb_encrypt(b"".join(
-                (r_int ^ j).to_bytes(16, "big") for j in range(start, stop)
-            )))
-        S = b"".join(parts)
-        return int.from_bytes(S[:d], "big")
+        ecb_encrypt = self._ecb_encrypt
+        cbc_mac = self._cbc_mac
+
+        def F(i: int, b: int) -> int:
+            x = base ^ (i << i_shift) ^ b
+            if tail == 1:
+                r_int = int.from_bytes(ecb_encrypt(x.to_bytes(16, "big")), "big")
+            else:
+                r_int = cbc_mac(x, tail)
+
+            # S = first d bytes of R || AES(R xor [1]) || AES(R xor [2]) || ...
+            # The extension blocks are mutually independent, so they are
+            # concatenated and encrypted in as few ECB calls as the per-call
+            # size limit allows (a single call for any right half up to 2032
+            # bytes, i.e. every practical message).
+            if d <= 16:
+                return r_int >> (8 * (16 - d))
+            extra_blocks = -(-(d - 16) // 16)
+            parts = [r_int.to_bytes(16, "big")]
+            for start in range(1, extra_blocks + 1, _ECB_MAX_BLOCKS_PER_CALL):
+                stop = min(start + _ECB_MAX_BLOCKS_PER_CALL, extra_blocks + 1)
+                parts.append(ecb_encrypt(b"".join(
+                    (r_int ^ j).to_bytes(16, "big") for j in range(start, stop)
+                )))
+            S = b"".join(parts)
+            return int.from_bytes(S[:d], "big")
+
+        return F
 
     def _encrypt_core(
         self, radix: int, n: int, a: int, b: int, tweak: bytes
     ) -> tuple[int, int]:
         """SP 800-38G Algorithm 7 on integer halves (a, b) = (NUM(A), NUM(B))."""
         params = self._params(radix, n, len(tweak))
-        q_prefix = tweak + b"\x00" * params.q_zero_pad
+        F = self._round_function(params, tweak)
         mod_even, mod_odd = params.mod_even, params.mod_odd
         for i in range(_NUM_ROUNDS):
-            y = self._F(params, q_prefix, i, b)
+            y = F(i, b)
             a, b = b, (a + y) % (mod_odd if i & 1 else mod_even)
         return a, b
 
@@ -436,10 +492,10 @@ class FF1:
     ) -> tuple[int, int]:
         """SP 800-38G Algorithm 8 on integer halves (a, b) = (NUM(A), NUM(B))."""
         params = self._params(radix, n, len(tweak))
-        q_prefix = tweak + b"\x00" * params.q_zero_pad
+        F = self._round_function(params, tweak)
         mod_even, mod_odd = params.mod_even, params.mod_odd
         for i in range(_NUM_ROUNDS - 1, -1, -1):
             c, b = b, a
-            y = self._F(params, q_prefix, i, b)
+            y = F(i, b)
             a = (c - y) % (mod_odd if i & 1 else mod_even)
         return a, b
