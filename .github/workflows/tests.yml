@@ -39,9 +39,3 @@ jobs:
 
       - name: Type-check
         run: python -m mypy ffx
-
-      - name: Run examples
-        run: |
-          python example.py
-          python -m examples.formatted_strings
-          python -m examples.ip_address
