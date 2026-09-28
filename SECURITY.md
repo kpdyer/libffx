@@ -2,14 +2,10 @@
 
 ## Supported Versions
 
-`libffx` is distributed on [PyPI](https://pypi.org/project/libffx/). Security
-fixes are released against the latest published version; please make sure you
-are on the most recent release before reporting an issue.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 2.x     | :white_check_mark: |
-| < 2.0   | :x:                |
+Security fixes are released for the latest 2.x version on
+[PyPI](https://pypi.org/project/libffx/); versions before 2.0 are not
+supported. Please make sure you are on the most recent release before
+reporting an issue.
 
 ## Reporting a Vulnerability
 

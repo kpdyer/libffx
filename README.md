@@ -2,8 +2,6 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/libffx.svg)](https://pypi.org/project/libffx/)
 [![Tests](https://github.com/kpdyer/libffx/actions/workflows/tests.yml/badge.svg)](https://github.com/kpdyer/libffx/actions/workflows/tests.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Python implementation of [NIST SP 800-38G FF1](https://csrc.nist.gov/publications/detail/sp/800-38g/final)
 format-preserving encryption, using AES-128/192/256 through `cryptography`.
@@ -105,7 +103,7 @@ From a checkout, in a virtual environment:
 
 ```bash
 python -m pip install -e ".[dev]"
-python -m pytest --cov=ffx --cov-report=term-missing
+python -m pytest --cov
 python -m mypy ffx
 python example.py
 python -m examples.formatted_strings
