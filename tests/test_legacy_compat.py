@@ -2,76 +2,41 @@
 
 The legacy library implemented the FFX[radix] addendum profile, which is
 FF1 with the tweak taken as a numeral *string* rather than raw bytes.
-Encoding that tweak string as ASCII bytes must reproduce every ciphertext
-in the original Voltage Security vector file (aes-ffx-vectors.txt) exactly.
+Encoding that tweak string as ASCII bytes must reproduce every vector in
+Voltage Security's "AES FFX Test Vector Data" (FFX[radix] profile, June
+2011) exactly. Vectors 1 and 2 are also NIST FF1 samples 2 and 1.
 
 v1 rendered radix-36 numeral strings in lowercase (a quirk of its
-big-integer library's digit rendering), so
-radix-36 plaintexts/ciphertexts from the vector file are lowercased before
-comparison. Tweak strings are used byte-for-byte as they appear.
+big-integer library's digit rendering), so vector 5's plaintext and
+ciphertext, uppercase in the vector data, appear here in lowercase. Tweak
+strings are used byte-for-byte as they appear.
 """
-
-import re
-from pathlib import Path
 
 import pytest
 
 from ffx import FF1
 
-VECTOR_FILE = Path(__file__).resolve().parent.parent / "aes-ffx-vectors.txt"
+KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
 
-
-def load_vectors():
-    """Parse the radix-10 and radix-36 sections of aes-ffx-vectors.txt."""
-    text = VECTOR_FILE.read_text()
-
-    key_match = re.search(
-        r"AES-128 key for all test vectors:\s*([0-9a-fA-F]{32})", text
-    )
-    assert key_match, "key line not found in aes-ffx-vectors.txt"
-    key = bytes.fromhex(key_match.group(1))
-
-    vectors = []
-    for block in re.split(r"Test vector \d+:", text)[1:]:
-        radix = int(re.search(r"Radix\s*=\s*(\d+)", block).group(1))
-        plaintext = re.search(r'Input \(length = \d+\):\s*"([^"]+)"', block).group(1)
-        tweak_match = re.search(r'Tweak \(length = \d+\):\s*"([^"]+)"', block)
-        tweak = tweak_match.group(1).encode("ascii") if tweak_match else b""
-        ciphertext = re.search(r'Encrypted:\s*"([^"]+)"', block).group(1)
-        vectors.append((radix, tweak, plaintext, ciphertext))
-
-    assert len(vectors) == 5, "expected 5 legacy vectors"
-    return key, vectors
-
-
-KEY, VECTORS = load_vectors()
-
-
-def normalize(s, radix):
-    """v1 rendered radix-36 numeral strings in lowercase."""
-    return s.lower() if radix > 10 else s
+# (radix, tweak, plaintext, ciphertext) for vectors 1 to 5
+VECTORS = [
+    (10, b"9876543210", "0123456789", "6124200773"),
+    (10, b"", "0123456789", "2433477484"),
+    (10, b"2718281828", "314159", "535005"),
+    (10, b"7777777", "999999999", "658229573"),
+    (36, b"TQF9J5QDAGSCSPB1", "c4xpwulbm3m863jh", "c8aq3u846zwh6qzp"),
+]
 
 
 @pytest.mark.parametrize(
     "radix,tweak,plaintext,ciphertext",
     VECTORS,
-    ids=[f"radix{v[0]}-t{len(v[1])}-n{len(v[2])}" for v in VECTORS],
+    ids=[f"vector{i}" for i in range(1, len(VECTORS) + 1)],
 )
-def test_legacy_encrypt(radix, tweak, plaintext, ciphertext):
+def test_legacy_vector(radix, tweak, plaintext, ciphertext):
     cipher = FF1(KEY, radix=radix)
-    got = cipher.encrypt(normalize(plaintext, radix), tweak=tweak)
-    assert got == normalize(ciphertext, radix)
-
-
-@pytest.mark.parametrize(
-    "radix,tweak,plaintext,ciphertext",
-    VECTORS,
-    ids=[f"radix{v[0]}-t{len(v[1])}-n{len(v[2])}" for v in VECTORS],
-)
-def test_legacy_decrypt(radix, tweak, plaintext, ciphertext):
-    cipher = FF1(KEY, radix=radix)
-    got = cipher.decrypt(normalize(ciphertext, radix), tweak=tweak)
-    assert got == normalize(plaintext, radix)
+    assert cipher.encrypt(plaintext, tweak=tweak) == ciphertext
+    assert cipher.decrypt(ciphertext, tweak=tweak) == plaintext
 
 
 def test_v1_zero_valued_tweak_means_no_tweak():
