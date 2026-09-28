@@ -303,34 +303,17 @@ class FF1:
         """Encrypt an integer 0 <= x < domain to another integer in the
         same range, via FF1 at radix 2 over (domain-1).bit_length() bits
         with cycle walking."""
-        tweak = self._check_tweak(tweak)
-        n = self._check_int_args(x, domain)
-        v = n - n // 2
-        mask = (1 << v) - 1
-        y = x
-        while True:
-            a, b = self._encrypt_core(2, n, y >> v, y & mask, tweak)
-            y = (a << v) | b
-            if y < domain:
-                return y
+        return self._crypt_int(x, domain, tweak, encrypt=True)
 
     def decrypt_int(self, y: int, *, domain: int, tweak: bytes = b"") -> int:
         """Inverse of :meth:`encrypt_int` for the same key, domain, and
         tweak."""
-        tweak = self._check_tweak(tweak)
-        n = self._check_int_args(y, domain)
-        v = n - n // 2
-        mask = (1 << v) - 1
-        x = y
-        while True:
-            a, b = self._decrypt_core(2, n, x >> v, x & mask, tweak)
-            x = (a << v) | b
-            if x < domain:
-                return x
+        return self._crypt_int(y, domain, tweak, encrypt=False)
 
-    def _check_int_args(self, x: int, domain: int) -> int:
-        """Validate (x, domain) and return the bit length n of the Feistel
-        state: the smallest n with 2**n >= domain."""
+    def _crypt_int(
+        self, x: int, domain: int, tweak: bytes, *, encrypt: bool
+    ) -> int:
+        tweak = self._check_tweak(tweak)
         if not isinstance(domain, int) or isinstance(domain, bool):
             raise TypeError(
                 f"domain must be an int, got {type(domain).__name__}"
@@ -343,13 +326,21 @@ class FF1:
             raise TypeError(f"value must be an int, got {type(x).__name__}")
         if not 0 <= x < domain:
             raise DomainError(f"value {x} is outside [0, {domain})")
+        # The Feistel state is n bits: the smallest n with 2**n >= domain.
         n = (domain - 1).bit_length()
         if n > _MAX_MESSAGE_LEN:
             raise DomainError(
                 f"domain of {n} bits exceeds the maximum supported "
                 f"domain of 2**{_MAX_MESSAGE_LEN}"
             )
-        return n
+        v = n - n // 2
+        mask = (1 << v) - 1
+        core = self._encrypt_core if encrypt else self._decrypt_core
+        while True:  # cycle walking: repeat until the result is in range
+            a, b = core(2, n, x >> v, x & mask, tweak)
+            x = (a << v) | b
+            if x < domain:
+                return x
 
     # ------------------------------------------------------------------
     # Shared validation
