@@ -17,6 +17,7 @@ is a wire contract; do not change it.
 from __future__ import annotations
 
 import string
+import threading
 from collections.abc import Callable
 from typing import NamedTuple
 
@@ -59,15 +60,6 @@ _MAX_MESSAGE_LEN = 2 ** 13
 #: lowest limit sys.set_int_max_str_digits() accepts, so int() and format()
 #: never hit that limit.
 _SPLIT_LEN = 64
-
-#: Largest number of AES blocks handed to the shared ECB context in one
-#: update() call. cryptography releases the GIL while encrypting a buffer
-#: of 2048 bytes or more, and its CipherContext stays exclusively borrowed
-#: until the call returns, so a second thread using the same context in
-#: that window fails with RuntimeError("Already borrowed"). Keeping every
-#: call below the threshold is what makes one FF1 instance safe to share
-#: between threads; ECB blocks are independent, so splitting is exact.
-_ECB_MAX_BLOCKS_PER_CALL = 127  # 127 * 16 = 2032 bytes
 
 
 class _FParams(NamedTuple):
@@ -135,6 +127,20 @@ class _Numerals(NamedTuple):
             x, digit = divmod(x, radix)
             out.append(alphabet[digit])
         return "".join(reversed(out))
+
+
+class _PerThreadECB(threading.local):
+    """One persistent AES-ECB encryptor per thread.
+
+    A cryptography cipher context raises RuntimeError("Already borrowed")
+    if two threads use it at once: on free-threaded Python for any call,
+    and with the GIL for buffers of 2048 bytes or more, which it encrypts
+    with the GIL released. Each thread therefore gets its own context,
+    created on first use.
+    """
+
+    def __init__(self, cipher: Cipher[modes.ECB]) -> None:
+        self.encrypt = cipher.encryptor().update
 
 
 class FF1:
@@ -232,11 +238,12 @@ class FF1:
         # ECB here is the raw single-block AES primitive, which SP 800-38G
         # builds FF1 from (the CBC-MAC chain in F and the S-extension
         # blocks are each one-block CIPH_K calls). No multi-block data is
-        # ever encrypted in ECB mode. The encryptor context is persistent:
-        # ECB has no chaining state, so update() calls encrypt each aligned
-        # block independently and the OpenSSL key schedule runs only once.
+        # ever encrypted in ECB mode. Each thread's encryptor context is
+        # persistent: ECB has no chaining state, so update() calls encrypt
+        # each aligned block independently and the OpenSSL key schedule
+        # runs once per thread.
         aes = algorithms.AES(key)
-        self._ecb_encrypt = Cipher(aes, modes.ECB()).encryptor().update
+        self._ecb = _PerThreadECB(Cipher(aes, modes.ECB()))
         # Cipher description for the long-MAC CBC path; encryptor() on it
         # creates a fresh zero-IV context per call.
         self._cbc_cipher = Cipher(aes, modes.CBC(b"\x00" * 16))
@@ -394,7 +401,7 @@ class FF1:
             + t.to_bytes(4, "big")
         )
         # codeql[py/weak-cryptographic-algorithm] One-block CIPH_K; see FF1.__init__.
-        e_p = int.from_bytes(self._ecb_encrypt(P), "big")
+        e_p = int.from_bytes(self._ecb.encrypt(P), "big")
 
         params = _FParams(
             e_p=e_p,
@@ -419,7 +426,7 @@ class FF1:
         for off in range(0, len(data), 16):
             blk = int.from_bytes(data[off:off + 16], "big") ^ r_int
             # codeql[py/weak-cryptographic-algorithm] One-block CIPH_K; see FF1.__init__.
-            r_int = int.from_bytes(self._ecb_encrypt(blk.to_bytes(16, "big")), "big")
+            r_int = int.from_bytes(self._ecb.encrypt(blk.to_bytes(16, "big")), "big")
         return r_int
 
     def _round_function(
@@ -448,7 +455,7 @@ class FF1:
         ) ^ (chain << (128 * (tail - 1)))
         i_shift = 8 * b_bytes
         d = params.d
-        ecb_encrypt = self._ecb_encrypt
+        ecb_encrypt = self._ecb.encrypt
         cbc_mac = self._cbc_mac
 
         def F(i: int, b: int) -> int:
@@ -460,21 +467,15 @@ class FF1:
                 r_int = cbc_mac(x, tail)
 
             # S = first d bytes of R || AES(R xor [1]) || AES(R xor [2]) || ...
-            # The extension blocks are mutually independent, so they are
-            # concatenated and encrypted in as few ECB calls as the per-call
-            # size limit allows (a single call for any right half up to 2032
-            # bytes, i.e. every practical message).
+            # The extension blocks are independent, so one ECB call
+            # encrypts them all.
             if d <= 16:
                 return r_int >> (8 * (16 - d))
-            extra_blocks = -(-(d - 16) // 16)
-            parts = [r_int.to_bytes(16, "big")]
-            for start in range(1, extra_blocks + 1, _ECB_MAX_BLOCKS_PER_CALL):
-                stop = min(start + _ECB_MAX_BLOCKS_PER_CALL, extra_blocks + 1)
-                # codeql[py/weak-cryptographic-algorithm] Independent S-extension blocks.
-                parts.append(ecb_encrypt(b"".join(
-                    (r_int ^ j).to_bytes(16, "big") for j in range(start, stop)
-                )))
-            S = b"".join(parts)
+            # codeql[py/weak-cryptographic-algorithm] Independent S-extension blocks.
+            extension = ecb_encrypt(b"".join(
+                (r_int ^ j).to_bytes(16, "big") for j in range(1, (d + 15) // 16)
+            ))
+            S = r_int.to_bytes(16, "big") + extension
             return int.from_bytes(S[:d], "big")
 
         return F
