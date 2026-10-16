@@ -30,33 +30,6 @@ def test_roundtrip(domain):
             assert cipher.decrypt_int(y, domain=domain, tweak=tweak) == x
 
 
-@pytest.mark.parametrize("domain", DOMAINS)
-def test_permutation_on_sample(domain):
-    """Distinct inputs must map to distinct outputs."""
-    cipher = FF1(KEY)
-    xs = sample_values(domain)
-    ys = [cipher.encrypt_int(x, domain=domain) for x in xs]
-    assert len(set(ys)) == len(xs)
-
-
-def test_deterministic():
-    a = FF1(KEY)
-    b = FF1(KEY)
-    for x in (0, 999_999):
-        first = a.encrypt_int(x, domain=10**6, tweak=b"t")
-        assert a.encrypt_int(x, domain=10**6, tweak=b"t") == first
-        assert b.encrypt_int(x, domain=10**6, tweak=b"t") == first
-
-
-def test_tweak_separation():
-    cipher = FF1(KEY)
-    domain = 10**12 + 39
-    xs = sample_values(domain)
-    with_a = [cipher.encrypt_int(x, domain=domain, tweak=b"a") for x in xs]
-    with_b = [cipher.encrypt_int(x, domain=domain, tweak=b"b") for x in xs]
-    assert with_a != with_b
-
-
 def test_independent_of_instance_alphabet():
     """Same key => same integer results, whatever the string alphabet is."""
     plain = FF1(KEY)

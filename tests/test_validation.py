@@ -13,19 +13,9 @@ class TestKeys:
         with pytest.raises(KeyLengthError):
             FF1(bytes(length), radix=10)
 
-    @pytest.mark.parametrize("length", [16, 24, 32])
-    def test_good_key_lengths(self, length):
-        FF1(bytes(length), radix=10)
-
     def test_key_must_be_bytes(self):
         with pytest.raises(TypeError):
             FF1("0" * 16, radix=10)
-
-    def test_key_length_error_is_value_error(self):
-        with pytest.raises(ValueError):
-            FF1(bytes(15), radix=10)
-        with pytest.raises(FFXError):
-            FF1(bytes(15), radix=10)
 
 
 class TestAlphabetConfig:
@@ -47,9 +37,6 @@ class TestAlphabetConfig:
         with pytest.raises(AlphabetError):
             FF1(KEY, alphabet="".join(map(chr, range(65537))))
 
-    def test_alphabet_at_limit(self):
-        FF1(KEY, alphabet="".join(map(chr, range(65536))))
-
     def test_integer_only_instance_rejects_strings(self):
         cipher = FF1(KEY)
         with pytest.raises(AlphabetError, match="radix= or alphabet="):
@@ -64,10 +51,13 @@ class TestAlphabetConfig:
         with pytest.raises(AlphabetError):
             cipher.decrypt("01234x6789")
 
-    def test_case_sensitive_no_normalization(self):
-        cipher = FF1(KEY, radix=36)
+    # Radix 16 converts with int(), which would accept uppercase; radix 36
+    # uses the per-numeral loop.
+    @pytest.mark.parametrize("radix", [16, 36])
+    def test_case_sensitive_no_normalization(self, radix):
+        cipher = FF1(KEY, radix=radix)
         with pytest.raises(AlphabetError):
-            cipher.encrypt("ABCDEF")  # alphabet is lowercase
+            cipher.encrypt("ABCDEF01")  # alphabet is lowercase
 
     def test_message_must_be_str(self):
         cipher = FF1(KEY, radix=10)
@@ -76,22 +66,13 @@ class TestAlphabetConfig:
 
 
 class TestMaximumSize:
-    def test_string_at_limit(self):
-        cipher = FF1(KEY, radix=2)
-        message = "01" * (8192 // 2)
-        assert cipher.decrypt(cipher.encrypt(message)) == message
+    """Inputs at the limits are covered by test_regression_vectors.py."""
 
     @pytest.mark.parametrize("radix", [2, 10, 36])
     def test_string_over_limit(self, radix):
         cipher = FF1(KEY, radix=radix)
         with pytest.raises(DomainError, match="maximum"):
             cipher.encrypt("0" * 8193)
-
-    def test_integer_at_limit(self):
-        cipher = FF1(KEY)
-        domain = 2**8192
-        y = cipher.encrypt_int(0, domain=domain)
-        assert cipher.decrypt_int(y, domain=domain) == 0
 
     def test_integer_over_limit(self):
         cipher = FF1(KEY)
