@@ -10,25 +10,19 @@ import secrets
 from ffx import FF1
 
 
-def encrypt_ip(ip: str, cipher: FF1) -> str:
-    """Encrypt an IPv4 or IPv6 address to another valid address."""
+def transform(ip: str, cipher: FF1, *, decrypt: bool = False) -> str:
+    """Encrypt (or decrypt) an IPv4 or IPv6 address to another address of
+    the same family."""
     addr = ipaddress.ip_address(ip)
-    domain = 2 ** (32 if addr.version == 4 else 128)
-    encrypted = cipher.encrypt_int(int(addr), domain=domain, tweak=b"ip")
-    return str(type(addr)(encrypted))
-
-
-def decrypt_ip(ip: str, cipher: FF1) -> str:
-    """Decrypt an address produced by encrypt_ip."""
-    addr = ipaddress.ip_address(ip)
-    domain = 2 ** (32 if addr.version == 4 else 128)
-    decrypted = cipher.decrypt_int(int(addr), domain=domain, tweak=b"ip")
-    return str(type(addr)(decrypted))
+    operation = cipher.decrypt_int if decrypt else cipher.encrypt_int
+    value = operation(int(addr), domain=2 ** addr.max_prefixlen, tweak=b"ip")
+    # Rebuild with the same class: ip_address() would turn a small IPv6
+    # value into an IPv4 address.
+    return str(type(addr)(value))
 
 
 def main():
     cipher = FF1(secrets.token_bytes(16))
-
     ips = [
         "192.168.1.1",
         "10.0.0.42",
@@ -38,18 +32,11 @@ def main():
         "::",
         "::1",
     ]
-
-    print("IP Address Format-Preserving Encryption")
-    print("=" * 50)
-
     for ip in ips:
-        encrypted = encrypt_ip(ip, cipher)
-        decrypted = decrypt_ip(encrypted, cipher)
+        encrypted = transform(ip, cipher)
+        decrypted = transform(encrypted, cipher, decrypt=True)
         assert decrypted == str(ipaddress.ip_address(ip))
-
-        print(f"\nOriginal:  {ip}")
-        print(f"Encrypted: {encrypted}")
-        print(f"Decrypted: {decrypted}")
+        print(f"{ip} -> {encrypted} -> {decrypted}")
 
 
 if __name__ == "__main__":

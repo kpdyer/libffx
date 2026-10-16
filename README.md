@@ -107,15 +107,8 @@ From a checkout, in a virtual environment:
 python -m pip install -e ".[dev]"
 python -m pytest --cov=ffx --cov-report=term-missing
 python -m mypy ffx
-python example.py
-python -m examples.formatted_strings
-python -m examples.ip_address
 python benchmark.py
 ```
-
-Tests cover the official NIST FF1 samples (AES-128/192/256), legacy
-FFX[radix] vectors, input validation, integer domains, and shared instances.
-See `python benchmark.py --help` for timing options.
 
 [MIT license](https://github.com/kpdyer/libffx/blob/master/LICENSE) ·
 [Report a vulnerability](https://github.com/kpdyer/libffx/blob/master/SECURITY.md)

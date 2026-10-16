@@ -4,8 +4,8 @@ v2 is a rewrite with a new API. v1 implemented the FFX[radix] addendum
 profile, which is FF1 with the tweak taken as a numeral string instead of
 raw bytes. **FF1 with the old tweak string encoded as ASCII bytes reproduces
 v1 FFX[radix] ciphertexts exactly**, with the zero-tweak exception below.
-`tests/test_legacy_compat.py` verifies every vector in
-[aes-ffx-vectors.txt](https://github.com/kpdyer/libffx/blob/master/aes-ffx-vectors.txt) against the new API.
+`tests/test_legacy_compat.py` verifies all five of Voltage Security's
+FFX[radix] test vectors against the new API.
 
 ```python
 from ffx import FF1
