@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=84.0.0"]
+requires = ["setuptools>=77.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,9 +10,6 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
-    {name = "Kevin P. Dyer", email = "kpdyer@gmail.com"}
-]
-maintainers = [
     {name = "Kevin P. Dyer", email = "kpdyer@gmail.com"}
 ]
 keywords = ["cryptography", "encryption", "format-preserving", "ff1", "ffx", "fpe", "aes"]
@@ -56,10 +53,11 @@ testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-ignore_missing_imports = true
+strict = true
 
 [tool.coverage.run]
 source = ["ffx"]
 branch = true
+
+[tool.coverage.report]
+show_missing = true
