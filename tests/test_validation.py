@@ -161,9 +161,25 @@ class TestArgumentTypes:
         with pytest.raises(TypeError):
             FF1(KEY, alphabet=alphabet)
 
+    @pytest.mark.parametrize("domain", ["1000000", 1e6, True])
+    def test_domain_must_be_int(self, domain):
+        cipher = FF1(KEY)
+        with pytest.raises(TypeError):
+            cipher.encrypt_int(0, domain=domain)
+        with pytest.raises(TypeError):
+            cipher.decrypt_int(0, domain=domain)
+
+    @pytest.mark.parametrize("value", ["0", 0.0, False])
+    def test_integer_value_must_be_int(self, value):
+        cipher = FF1(KEY)
+        with pytest.raises(TypeError):
+            cipher.encrypt_int(value, domain=10**6)
+        with pytest.raises(TypeError):
+            cipher.decrypt_int(value, domain=10**6)
+
 
 class TestErrorHierarchy:
     def test_validation_errors_are_ffxerror_and_valueerror(self):
+        assert issubclass(FFXError, ValueError)
         for exc in (KeyLengthError, AlphabetError, DomainError):
             assert issubclass(exc, FFXError)
-            assert issubclass(exc, ValueError)
