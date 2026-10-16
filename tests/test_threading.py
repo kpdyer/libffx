@@ -1,13 +1,9 @@
 """One FF1 instance shared between threads.
 
-FF1 keeps no per-call state, but every call goes through one persistent
-AES-ECB context from ``cryptography``. That backend releases the GIL while
-encrypting a buffer of 2048 bytes or more and holds an exclusive borrow on
-the context until the call returns, so a second thread using the same
-context in that window fails with ``RuntimeError: Already borrowed``. The
-library therefore never hands the shared context a buffer that large; the
-only place that could is the S-extension step for wide right halves, which
-is split into calls of at most 127 blocks (2032 bytes).
+A ``cryptography`` cipher context raises ``RuntimeError: Already borrowed``
+if two threads use it at once: on free-threaded Python for any call, and
+with the GIL for buffers of 2048 bytes or more. FF1 gives each thread its
+own context; CI runs these tests on a free-threaded build too.
 """
 
 import random
@@ -36,27 +32,6 @@ def run_in_threads(work, n_threads=8):
     assert not errors, errors[0]
 
 
-def test_ecb_calls_stay_below_gil_release_threshold():
-    """Deterministic form of the invariant: record every buffer handed to
-    the shared ECB context while encrypting a message whose S-extension
-    would otherwise be a single 4400-byte call, and check none reaches
-    2048 bytes."""
-    cipher = FF1(KEY, alphabet=BIG_ALPHABET)
-    sizes = []
-    real_ecb_encrypt = cipher._ecb_encrypt
-
-    def recording_ecb_encrypt(buf):
-        sizes.append(len(buf))
-        return real_ecb_encrypt(buf)
-
-    cipher._ecb_encrypt = recording_ecb_encrypt
-    rng = random.Random(4400)
-    plaintext = "".join(rng.choices(BIG_ALPHABET, k=4400))  # d = 4404
-    assert cipher.decrypt(cipher.encrypt(plaintext)) == plaintext
-    assert max(sizes) >= 1024, "the S-extension path was not exercised"
-    assert max(sizes) < 2048
-
-
 def test_shared_instance_short_messages():
     cipher = FF1(KEY, radix=10)
     plaintext = "4111111111111111"
@@ -71,8 +46,8 @@ def test_shared_instance_short_messages():
 
 
 def test_shared_instance_long_messages():
-    # radix 65536, n = 2200: d = 2204, so each round's S-extension covers
-    # 137 blocks and takes the chunked path.
+    # radix 65536, n = 2200: d = 2204, so each round's S-extension is one
+    # 2192-byte ECB call, which cryptography makes with the GIL released.
     cipher = FF1(KEY, alphabet=BIG_ALPHABET)
     rng = random.Random(2200)
     plaintext = "".join(rng.choices(BIG_ALPHABET, k=2200))
